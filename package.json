@@ -5,8 +5,9 @@
   "main": "build/index.js",
   "type": "module",
   "scripts": {
-    "start": "concurrently --no-color npm:build:watch npm:dev",
-    "dev": "nodemon",
+    "start": "concurrently --no-color npm:build:watch npm:server:dev",
+    "server": "build/signalling-server/server.js",
+    "server:dev": "nodemon build/signalling-server/server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -19,5 +20,11 @@
     "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^3.3.0",
+    "install": "^0.13.0",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.39.0",
+    "ws": "^8.16.0"
   }
 }
