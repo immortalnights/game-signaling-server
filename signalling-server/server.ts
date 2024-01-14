@@ -4,16 +4,21 @@ const app = App({})
     .ws("/*", {
         idleTimeout: 32,
         maxBackpressure: 1024,
-        maxPayloadLength: 512,
+        maxPayloadLength: undefined, // default
         compression: DEDICATED_COMPRESSOR_3KB,
 
-        open(ws) {},
-
-        message: (ws, message, isBinary) => {
-            let ok = ws.send(message, isBinary, true)
+        open(ws) {
+            console.log("Client connected")
         },
 
-        close(ws, code, message) {},
+        message: (ws, message, isBinary) => {
+            console.log("Client message", message.byteLength)
+            ws.send("ok", true, true)
+        },
+
+        close(ws, code, message) {
+            console.log("Client disconnected")
+        },
     })
     .get("/*", (res, req) => {
         res.writeStatus("400 OK").end("Websocket Server Only")
