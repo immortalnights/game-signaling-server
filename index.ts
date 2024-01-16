@@ -23,14 +23,12 @@ class PeerConnection {
         })
     }
 
-    createDataChannel(name: string = "default") {
+    async offer(name: string = "default"): Promise<RTCSessionDescription> {
         const channel = this.pc.createDataChannel(name, {
             protocol: "default",
         })
         this.subscribeToDataChannel(channel)
-    }
 
-    async offer(): Promise<RTCSessionDescription> {
         const offer = await this.pc.createOffer()
         await this.pc.setLocalDescription(offer)
 
@@ -123,7 +121,6 @@ class Client {
         this.game = randomString()
 
         this.pc = new PeerConnection()
-        this.pc.createDataChannel()
         const sessionDescription = await this.pc.offer()
 
         console.debug(sessionDescription)
