@@ -1,13 +1,82 @@
 import select, { Separator } from "@inquirer/select"
 import input from "@inquirer/input"
 import { WebSocket, createWebSocketStream } from "ws"
-import { RTCPeerConnection } from "werift"
+import {
+    RTCPeerConnection,
+    RTCDataChannel,
+    RTCSessionDescription,
+} from "werift"
+import { randomString } from "./src/utilities.js"
+
+class PeerConnection {
+    pc: RTCPeerConnection
+    private dc?: RTCDataChannel
+
+    constructor() {
+        this.pc = new RTCPeerConnection({})
+        this.pc.iceConnectionStateChange.subscribe((v) =>
+            console.log("pc.iceConnectionStateChange", v),
+        )
+
+        this.pc.onDataChannel.subscribe((channel) => {
+            this.subscribeToDataChannel(channel)
+        })
+    }
+
+    createDataChannel(name: string = "default") {
+        const channel = this.pc.createDataChannel(name, {
+            protocol: "default",
+        })
+        this.subscribeToDataChannel(channel)
+    }
+
+    async offer(): Promise<RTCSessionDescription> {
+        const offer = await this.pc.createOffer()
+        await this.pc.setLocalDescription(offer)
+
+        return offer
+    }
+
+    async response(answer: RTCSessionDescription) {
+        await this.pc.setRemoteDescription(answer)
+    }
+
+    async answer(offer: RTCSessionDescription): Promise<RTCSessionDescription> {
+        await this.pc.setRemoteDescription(offer)
+
+        const answer = await this.pc.createAnswer()
+        await this.pc.setLocalDescription(answer)
+
+        return answer
+    }
+
+    send(data: string | Buffer) {
+        this.dc?.send(data)
+    }
+
+    close() {
+        this.pc.close()
+    }
+
+    private subscribeToDataChannel(channel: RTCDataChannel) {
+        this.dc = channel
+
+        this.dc.stateChanged.subscribe((v) => {
+            console.log("dc.stateChanged", v)
+        })
+
+        this.dc.message.subscribe((data) => {
+            console.log("dc.message", data.toString())
+        })
+
+        this.dc.error.subscribe((err) => console.error)
+    }
+}
 
 class Client {
     game?: string
     ws?: WebSocket
-    rtc?: RTCPeerConnection
-    dc?: RTCDataChannel
+    pc?: PeerConnection
 
     constructor() {}
 
@@ -27,11 +96,7 @@ class Client {
                     // this.ws.off("error", handleFailedToConnect)
                 }
 
-                this.ws?.send("ping", () => {})
-
-                setTimeout(() => {
-                    resolve(true)
-                }, 1000)
+                resolve(true)
             })
 
             this.ws.on("message", (data, isBinary) => {
@@ -54,86 +119,146 @@ class Client {
         })
     }
 
-    async createGame(): Promise<boolean> {
+    async createGame(): Promise<void> {
         this.game = randomString()
 
-        const pc = new RTCPeerConnection({})
-        pc.iceConnectionStateChange.subscribe((v) =>
-            console.log("pc.iceConnectionStateChange", v),
-        )
+        this.pc = new PeerConnection()
+        this.pc.createDataChannel()
+        const sessionDescription = await this.pc.offer()
 
-        const dc = pc.createDataChannel("game", {
-            protocol: "ttt",
-        })
+        console.debug(sessionDescription)
 
-        dc.stateChanged.subscribe((v) => {
-            console.log("dc.stateChanged", v)
-            if (v === "open") {
-                console.log("open")
-            }
-        })
-
-        let index = 0
-        dc.message.subscribe((data) => {
-            console.log("message", data.toString())
-            dc.send("pong" + index++)
-        })
-
-        const offer = await pc.createOffer()!
-        await pc.setLocalDescription(offer)
-
-        return new Promise((resolve, reject) => {
-            if (this.ws) {
-                const data = JSON.stringify(pc.localDescription)
-                console.log("Sending local description", data.length)
-                this.ws.send(data)
-            } else {
-                console.log("Invalid WebSocket")
-                reject(false)
-            }
-        })
-
-        // const answer = JSON.parse(
-        //     await new Promise((r) =>
-        //         socket.on("message", (data) => r(data as string)),
-        //     ),
-        // )
-        // console.log(answer)
-
-        // await pc.setRemoteDescription(answer)
+        if (this.ws) {
+            const data = JSON.stringify({
+                action: "host-game",
+                id: this.game,
+                sessionDescription: sessionDescription,
+            })
+            console.log("Sending local description", data.length)
+            this.ws.send(data)
+        }
     }
 
-    async waitForOpponent(): Promise<boolean> {
-        const check = (timeout: number = 0) => {
-            return false
+    async waitForOpponent(): Promise<void> {
+        const opponent = await new Promise<{
+            player: string
+            sessionDescription: RTCSessionDescription
+        }>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(false), 30000)
+
+            this.ws?.once("message", (data, isBinary) => {
+                clearTimeout(timeout)
+
+                const json = JSON.parse(data.toString())
+                if (json.action === "opponent-joined") {
+                    console.log("Opponent joined successfully")
+                    resolve({
+                        player: json.player,
+                        sessionDescription: json.sessionDescription,
+                    })
+                } else {
+                    console.error("Received unexpected message", json.action)
+                    reject(false)
+                }
+            })
+        })
+
+        // this.opponent = opponent.player
+        await this.pc?.response(opponent.sessionDescription)
+    }
+
+    async findGame(): Promise<{} | undefined> {
+        console.log("Loading games...")
+
+        const games = await new Promise<{}[]>((resolve, reject) => {
+            this.ws?.once("message", (data, isBinary) => {
+                const json = JSON.parse(data.toString())
+
+                if (json.action === "game-list") {
+                    console.debug(
+                        "Received expected game list",
+                        json.games.length,
+                    )
+                    resolve(json.games)
+                } else {
+                    console.error("Received unexpected message", json.action)
+                    reject(false)
+                }
+            })
+
+            this.ws?.send(
+                JSON.stringify({
+                    action: "list-games",
+                }),
+                (err) => {
+                    console.log("reply?", err)
+                },
+            )
+        })
+
+        let game
+
+        const answer = await select({
+            message: "Tic-tac-toe: Main Menu",
+            choices: [
+                ...games.map((game) => ({
+                    name: `${game.name} by ${game.host}`,
+                    value: game.name,
+                    description: "Join game",
+                })),
+                new Separator(),
+                {
+                    name: "Back",
+                    value: "back",
+                    description: "Back",
+                },
+            ],
+        })
+
+        switch (answer) {
+            case "back": {
+                break
+            }
+            default: {
+                game = games.find((game) => game.name === answer)
+                break
+            }
         }
 
-        return new Promise((resolve, reject) => {
-            let ok = false
-            let timeout = false
-            const wait = () =>
-                setTimeout(() => {
-                    console.log("Checking...")
-                    if (ok) {
-                        resolve(true)
-                    } else if (timeout) {
-                        reject(false)
-                    } else {
-                        wait()
-                    }
-                }, 1000)
+        return game
+    }
 
-            wait()
-        })
+    async joinGame(game: {}) {
+        console.debug(`Joining game... ${game.name}`)
+        this.pc = new PeerConnection()
+        const answer = await this.pc.answer(game.sessionDescription)
+
+        this.ws?.send(
+            JSON.stringify({
+                action: "joined-game",
+                id: game.name,
+                sessionDescription: answer,
+            }),
+        )
     }
 
     async playGame(): Promise<boolean> {
-        return false
+        await this.pc?.send("START GAME!")
+
+        setTimeout(() => {
+            console.log("try to send some data...")
+            this.pc?.send("message")
+        }, 5000)
+
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                console.log("game over")
+                this.pc?.close()
+                resolve(true)
+            }, 30000)
+        })
     }
 }
-
-const randomString = (len: number = 6) =>
-    (Math.random() + 1).toString(36).substring(len)
 
 const startGame = async (): Promise<string | undefined> => {
     return undefined
@@ -153,41 +278,6 @@ const hostGame = async (): Promise<Client | undefined> => {
 
     return c
 }
-
-// const findGame = async (): Promise<string | undefined> => {
-//     const address = getSignalingServerAddress()
-
-//     await connectToSig(address)
-
-//     // fetch games
-//     console.log("Loading games...")
-
-//     let game
-
-//     const answer = await select({
-//         message: "Tic-tac-toe: Main Menu",
-//         choices: [
-//             // TODO list games
-//             new Separator(),
-//             {
-//                 name: "Back",
-//                 value: "back",
-//                 description: "Back",
-//             },
-//         ],
-//     })
-
-//     switch (answer) {
-//         case "back": {
-//             break
-//         }
-//     }
-
-//     return game
-// }
-
-const joinGame = async (game: string) => {}
-const playGame = async (game: string) => {}
 
 const mainMenu = async () => {
     const answer = await select({
@@ -219,11 +309,11 @@ const mainMenu = async () => {
 
     switch (answer) {
         case "single-player": {
-            const game = await startGame()
-            if (game) {
-                await joinGame(game)
-                await playGame(game)
-            }
+            // const game = await startGame()
+            // if (game) {
+            //     await joinGame(game)
+            //     await playGame(game)
+            // }
             break
         }
         case "host-game": {
@@ -239,13 +329,13 @@ const mainMenu = async () => {
         case "join-game": {
             const client = new Client()
             const address = await getSignalingServerAddress()
-            client.connectToSignalingServer(address)
-            // const games = await client.findGames()
+            await client.connectToSignalingServer(address)
+            const game = await client.findGame()
 
-            // if (game) {
-            //     await joinGame(game)
-            //     await playGame(game)
-            // }
+            if (game) {
+                await client.joinGame(game)
+                await client.playGame()
+            }
             break
         }
         case "quit": {
