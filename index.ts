@@ -341,10 +341,6 @@ const mainMenu = async () => {
     }
 }
 
-const main = async () => {
-    while (1) {
-        await mainMenu()
-    }
+while (1) {
+    await mainMenu()
 }
-
-main()
