@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "concurrently --no-color npm:build:watch npm:server:dev",
-    "server": "build/signalling-server/server.js",
-    "server:dev": "nodemon build/signalling-server/server.js",
+    "server": "build/signallingserver/server.js",
+    "server:dev": "nodemon build/signallingserver/server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
