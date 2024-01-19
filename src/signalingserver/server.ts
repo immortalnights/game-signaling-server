@@ -1,5 +1,5 @@
 import { App, DEDICATED_COMPRESSOR_3KB, WebSocket } from "uWebSockets.js"
-import { randomString } from "../src/utilities.js"
+import { randomString } from "../utilities.js"
 import { RTCSessionDescription } from "werift"
 
 interface Game {
