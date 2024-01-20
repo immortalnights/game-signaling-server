@@ -81,7 +81,7 @@ const app = App({})
                     ws.send(
                         JSON.stringify({
                             action: "game-list",
-                            games: availableGames,
+                            data: availableGames,
                         }),
                         false,
                         true,
