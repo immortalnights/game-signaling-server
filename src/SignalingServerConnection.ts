@@ -1,36 +1,42 @@
 import { WebSocket, RawData } from "ws"
-import { GameOptions, GameRecord } from "./signalingserver/types.js"
+import {
+    GameOptions,
+    GameRecord,
+    MessageResponse,
+} from "./signalingserver/types.js"
 
 export class SignalingServerConnection {
     private ws?: WebSocket
     address: string
+    private handleErrorBind: (error: string) => void
 
     constructor(address: string) {
         this.address = address
+        this.handleErrorBind = this.handleError.bind(this)
     }
 
-    async waitForMessage() {}
+    async waitForMessage<T>(name: string): Promise<T> {
+        return new Promise((resolve, reject) => {
+            const handleMessage = (data: RawData, isBinary: boolean) => {
+                this.ws?.off("error", this.handleError)
 
-    /**
-     *
-     */
-    async host(
-        name: string,
-        options?: Omit<GameOptions, "name">,
-    ): Promise<GameRecord> {
-        // send "host-game", {name ,...options}
-        return Promise.reject()
-    }
+                const message = this.handleMessage(data, isBinary)
+                if (message.action === name) {
+                    resolve(message.data as T)
+                } else {
+                    reject(
+                        `Received unexpected message '${message.action}' instead of '${name}'`,
+                    )
+                }
+            }
+            const handlerError = (err: string) => {
+                this.ws?.off("message", handleMessage)
+                reject(err)
+            }
 
-    /**
-     *
-     */
-    async list(): Promise<GameRecord[]> {
-        return Promise.reject()
-    }
-
-    async join(game: GameRecord): Promise<GameRecord> {
-        return Promise.reject()
+            this.ws?.once("message", handleMessage)
+            this.ws?.once("error", handlerError)
+        })
     }
 
     async connect(): Promise<boolean> {
@@ -48,15 +54,11 @@ export class SignalingServerConnection {
                 if (this.ws) {
                     this.ws.off("error", handleFailedToConnect)
 
-                    this.ws.on("error", (err) => {
-                        console.log("WebSocket error", err)
-                    })
+                    this.ws.on("error", this.handleErrorBind)
                 }
 
                 resolve(true)
             })
-
-            this.ws.on("message", this.handleMessage.bind(this))
 
             this.ws.once("close", (code, reason) => {
                 console.log("WebSocket closed", code, reason)
@@ -66,23 +68,72 @@ export class SignalingServerConnection {
         })
     }
 
+    /**
+     *
+     */
+    async host(
+        name: string,
+        options?: Omit<GameOptions, "name">,
+    ): Promise<GameRecord> {
+        // send "host-game", {name ,...options}
+        return Promise.reject()
+    }
+
+    /**
+     *
+     */
+    async list(): Promise<GameRecord[]> {
+        return new Promise(async (resolve, reject) => {
+            this.send("list-games")
+
+            this.waitForMessage<GameRecord[]>("game-list").then(resolve, reject)
+        })
+    }
+
+    async join(game: GameRecord): Promise<GameRecord> {
+        return Promise.reject()
+    }
+
     disconnect() {
         if (this.ws) {
-            this.ws?.close()
+            this.ws.off("error", this.handleErrorBind)
+            this.ws.close()
         }
     }
 
-    private send(data: {}) {}
+    private send(name: string, data?: Object) {
+        if (this.ws) {
+            this.ws.send(
+                JSON.stringify({
+                    action: name,
+                    data: data,
+                }),
+            )
+        }
+    }
 
-    private handleMessage(data: RawData, isBinary: boolean) {
+    private handleMessage(data: RawData, isBinary: boolean): MessageResponse {
         console.log("WebSocket message", data.toString().length, isBinary)
+
+        let json
+        try {
+            json = JSON.parse(data.toString())
+        } catch (err) {}
+
+        return json as MessageResponse
+    }
+
+    private handleError(error: string) {
+        console.log("WebSocket error", error)
     }
 }
 
 // test
 const ss = new SignalingServerConnection("127.0.0.1:9001")
 await ss.connect()
-await ss.list()
-await ss.host("MyGame", { maxPlayers: 2 })
-await ss.list()
-ss.disconnect()
+let games = await ss.list()
+console.log("Games:", games)
+// await ss.host("MyGame", { maxPlayers: 2 })
+// await ss.list()
+
+setTimeout(() => ss.disconnect(), 5000)
