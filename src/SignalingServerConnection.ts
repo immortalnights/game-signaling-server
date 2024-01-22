@@ -1,5 +1,10 @@
 import { WebSocket, RawData } from "ws"
-import { GameOptions, GameRecord, Message } from "./signalingserver/types.js"
+import {
+    GameOptions,
+    GameRecord,
+    Response,
+    ServerResponseMessages,
+} from "./signalingserver/types.js"
 import { RTCSessionDescription } from "werift"
 
 export class SignalingServerConnection {
@@ -17,25 +22,34 @@ export class SignalingServerConnection {
      * @param name
      * @returns
      */
-    async waitForMessage<T>(name: string): Promise<T> {
+    async waitForMessage<T>(name: keyof ServerResponseMessages): Promise<T> {
         return new Promise((resolve, reject) => {
             const handleMessage = (data: RawData, isBinary: boolean) => {
                 this.ws?.off("error", this.handleError)
 
                 const message = this.handleMessage(data, isBinary)
                 if (message.action === name) {
-                    resolve(message.data as T)
+                    if (message.success) {
+                        console.debug(`Received message '${name}'`)
+                        resolve(
+                            message.data as ServerResponseMessages[typeof name],
+                        )
+                    } else {
+                        reject(message.error)
+                    }
                 } else {
                     reject(
                         `Received unexpected message '${message.action}' instead of '${name}'`,
                     )
                 }
             }
+
             const handlerError = (err: string) => {
                 this.ws?.off("message", handleMessage)
                 reject(err)
             }
 
+            console.debug(`Waiting for '${name}'`)
             this.ws?.once("message", handleMessage)
             this.ws?.once("error", handlerError)
         })
@@ -92,7 +106,19 @@ export class SignalingServerConnection {
         return new Promise(async (resolve, reject) => {
             this.send("host-game", { name, options, sessionDescription })
 
-            this.waitForMessage<GameRecord>("host-game-response").then(
+            this.waitForMessage("host-game-response").then(resolve, reject)
+        })
+    }
+
+    /**
+     *
+     * @param name
+     */
+    async delete(name: string) {
+        return new Promise(async (resolve, reject) => {
+            this.send("delete-game", { id: name })
+
+            this.waitForMessage<void>("delete-game-response").then(
                 resolve,
                 reject,
             )
@@ -101,14 +127,7 @@ export class SignalingServerConnection {
 
     /**
      *
-     * @param name
-     */
-    delete(name: string) {
-        this.send("delete-game", { name })
-    }
-
-    /**
-     *
+     * @returns
      */
     async list(): Promise<GameRecord[]> {
         return new Promise(async (resolve, reject) => {
@@ -148,7 +167,7 @@ export class SignalingServerConnection {
         }
     }
 
-    private handleMessage(data: RawData, isBinary: boolean): Message {
+    private handleMessage(data: RawData, isBinary: boolean): Response<unknown> {
         console.log("WebSocket message", data.toString().length, isBinary)
 
         let json
@@ -156,27 +175,10 @@ export class SignalingServerConnection {
             json = JSON.parse(data.toString())
         } catch (err) {}
 
-        return json as Message
+        return json as Response<unknown>
     }
 
     private handleError(error: string) {
         console.log("WebSocket error", error)
     }
 }
-
-let games
-let hosted
-
-// test
-const ss = new SignalingServerConnection("127.0.0.1:9001")
-await ss.connect("TestA")
-games = await ss.list()
-console.log("Games:", games)
-hosted = await ss.host("MyGame", "abc", { maxPlayers: 2 })
-console.log("Hosted", hosted)
-games = await ss.list()
-console.log("Games:", games)
-await ss.delete("MyGame")
-console.log("Games:", games)
-
-setTimeout(() => ss.disconnect(), 5000)

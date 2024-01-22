@@ -10,6 +10,7 @@ export interface GameOptions {
     maxPlayers: number
     [key: string]: unknown
 }
+
 export interface GameRecord {
     id: string
     name: string
@@ -23,34 +24,77 @@ export interface GameDescription {
     options: GameOptions
 }
 
+export interface JoinGameData {
+    id: string
+    sessionDescription: RTCSessionDescription
+}
+
 export interface Message<T> {
     action: keyof ClientMessages
     data: T
 }
 
+export interface SuccessResponse<T> {
+    success: true
+    action: keyof ServerResponseMessages | keyof ServerMessages
+    data?: T
+}
+
 export interface ErrorResponse {
-    msg: string
+    success: false
+    action: keyof ServerResponseMessages | keyof ServerMessages
+    error?: string
+}
+
+export type Response<T> = SuccessResponse<T> | ErrorResponse
+
+export interface MessagesX {
+    "register-player": {
+        data: unknown
+        response: "register-player-response"
+        responseData: unknown
+    }
+    "host-game": {
+        data: GameOptions
+        response: "host-game-response"
+        responseData: GameRecord
+    }
+    "delete-game": {
+        data: string
+        response: "delete-game-response"
+        responseData: unknown
+    }
+    "list-games": {
+        data: void
+        response: "list-games-response"
+        responseData: GameRecord[]
+    }
+    "join-game": {
+        data: {
+            id: string
+            sessionDescription: RTCSessionDescription
+        }
+        response: "join-game-response"
+        responseData: GameRecord
+    }
 }
 
 export interface ClientMessages {
-    "register-player": Message<Object>
-    "host-game": Message<GameOptions>
-    "delete-game": Message<string>
-    "list-games": Message<void>
-    "join-game": Message<{
-        id: string
-        sessionDescription: RTCSessionDescription
-    }>
+    "register-player": Object
+    "host-game": GameOptions
+    "delete-game": { id: string }
+    "list-games": void
+    "join-game": JoinGameData
 }
 
 export interface ServerResponseMessages {
-    "register-player-response": Message<Object | ErrorResponse>
-    "host-game-response": Message<GameRecord | ErrorResponse>
-    "delete-game-response": Message<void | ErrorResponse>
-    "list-games-response": Message<GameRecord[]>
-    "join-game-response": Message<GameRecord | ErrorResponse>
+    "register-player-response": Object
+    "host-game-response": GameRecord
+    "delete-game-response": void
+    "list-games-response": GameRecord[]
+    "join-game-response": GameRecord
 }
 
 export interface ServerMessages {
-    "player-joined": Message<PlayerRecord>
+    "player-joined": PlayerRecord
 }

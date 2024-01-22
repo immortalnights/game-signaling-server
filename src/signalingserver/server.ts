@@ -6,11 +6,12 @@ import {
     GameDescription,
     GameOptions,
     GameRecord,
+    JoinGameData,
     Message,
-    MessageInterface,
-    MessageType,
     PlayerRecord,
+    ServerMessages,
     ServerResponseMessages,
+    SuccessResponse,
 } from "./types.js"
 
 interface UserData {
@@ -84,7 +85,7 @@ class GameManager {
     join(
         ws: WebSocket<UserData>,
         game: ServerGameRecord,
-        data: MessageInterface["join-game"]["data"],
+        sessionDescription: RTCSessionDescription,
     ) {
         const host = game.players.find((player) => player.host)
         const newPlayerId = ws.getUserData().id
@@ -96,10 +97,8 @@ class GameManager {
         const playerRecord = {
             name: newPlayerId,
             host: false,
-            sessionDescription: data.sessionDescription,
+            sessionDescription: sessionDescription,
         }
-
-        const existingPlayers = [...game.players]
 
         // Add the player to the game
         game.players.push({
@@ -107,23 +106,7 @@ class GameManager {
             socket: ws,
         } satisfies ServerPlayerRecord)
 
-        // Send the game to the new player
-        ws.send(
-            JSON.stringify({
-                action: "join-game-response",
-                data: game,
-            } satisfies MessageInterface["join-game-response"]),
-        )
-
-        // Send the player to the other players
-        existingPlayers.map((player) => {
-            player.socket.send(
-                JSON.stringify({
-                    action: "player-joined",
-                    data: playerRecord,
-                } satisfies MessageInterface["player-joined"]),
-            )
-        })
+        return game
     }
 
     delete(game: ServerGameRecord) {
@@ -136,33 +119,51 @@ class GameManager {
     }
 }
 
+interface MessageHandlerError {
+    error: string
+}
+
 const sendResponse = (
     ws: WebSocket<UserData>,
     name: keyof ServerResponseMessages,
-    data?: object,
-) =>
-    ws.send(
-        JSON.stringify({
+    data?: object | MessageHandlerError,
+) => {
+    let responseData
+    if (data && "error" in data && data.error) {
+        responseData = {
+            success: false,
             action: name,
             data,
-        }),
-    )
+        }
+    } else {
+        responseData = {
+            success: true,
+            action: name,
+            data,
+        }
+    }
+
+    ws.send(JSON.stringify(responseData))
+}
 
 interface ClientMessageHandlers {
-    "register-player": (data: unknown) => Object | ErrorResponse
+    "register-player": (data: unknown) => Object | MessageHandlerError
     "host-game": (
         ws: WebSocket<UserData>,
         data: GameDescription,
-    ) => GameRecord | ErrorResponse
-    "delete-game": (data: { name: string }) => undefined | ErrorResponse
-    "list-games": () => GameRecord[]
+    ) => GameRecord | MessageHandlerError
+    "delete-game": (
+        ws: WebSocket<UserData>,
+        data: { id: string },
+    ) => undefined | MessageHandlerError
+    "list-games": () => GameRecord[] | MessageHandlerError
     "join-game": (
         ws: WebSocket<UserData>,
         data: {
             id: string
             sessionDescription: RTCSessionDescription
         },
-    ) => GameRecord | ErrorResponse
+    ) => GameRecord | MessageHandlerError
 }
 
 const clientMessageHandlers: ClientMessageHandlers = {
@@ -174,47 +175,42 @@ const clientMessageHandlers: ClientMessageHandlers = {
     "host-game": (ws, data) => {
         let response
         if (data.name && data.sessionDescription) {
-            const gameRecord = gameManager.host(
+            response = gameManager.host(
                 ws,
                 data.name,
                 data.sessionDescription,
                 data.options,
             )
 
-            response = gameRecord
-
             console.debug("Game registered")
         } else {
             console.error("Missing required host data")
-            response = { msg: "Missing required game data" }
+            response = { error: "Missing required game data" }
         }
 
         return response
     },
-    "delete-game": (data) => {
-        return {
-            msg: "Unimplemented",
+    "delete-game": (ws, data) => {
+        let response
+        if (data.id) {
+            const game = gameManager.games.find((game) => game.id === data.id)
+            if (game) {
+                const host = game.players.find((player) => player.host)
+                if (host && host.socket === ws) {
+                    gameManager.delete(game)
+                } else {
+                    console.error(
+                        `Attempt to delete game from non-host '${
+                            ws.getUserData().id
+                        }'`,
+                    )
+                }
+            } else {
+                console.error(`Failed to find game '${data.id}'`)
+            }
         }
-        // const realMessage = msg as Message<{ name: string }>
-        // const gameName = realMessage.data.name
-        // console.log("delete game", gameName)
-        // const game = gameManager.games.find(
-        //     (game) => game.name === gameName,
-        // )
-        // if (game) {
-        //     const host = game.players.find((player) => player.host)
-        //     if (host && host.socket === ws) {
-        //         gameManager.delete(game)
-        //     } else {
-        //         console.error(
-        //             `Attempt to delete game from non-host '${
-        //                 ws.getUserData().id
-        //             }'`,
-        //         )
-        //     }
-        // } else {
-        //     console.error(`Failed to find game '${gameName}'`)
-        // }
+
+        return response
     },
     "list-games": () => {
         console.debug(
@@ -224,31 +220,50 @@ const clientMessageHandlers: ClientMessageHandlers = {
         return gameManager.availableGames
     },
     "join-game": (ws, data) => {
-        return {
-            msg: "Unimplemented",
+        let response
+        if (data.id && data.sessionDescription) {
+            const game = gameManager.games.find((game) => game.id === data.id)
+            if (game) {
+                if (game.players.length < game.options.maxPlayers) {
+                    response = gameManager.join(
+                        ws,
+                        game,
+                        data.sessionDescription,
+                    )
+
+                    // Send the game to the new player
+                    sendResponse(ws, "join-game-response", response)
+
+                    // Send the player to the other players
+                    const newPlayer = response.players.find(
+                        (player) => player.socket === ws,
+                    )
+
+                    response.players.map((player) => {
+                        if (newPlayer && player.socket !== ws) {
+                            player.socket.send(
+                                JSON.stringify({
+                                    success: true,
+                                    action: "player-joined",
+                                    data: newPlayer,
+                                } satisfies SuccessResponse<ServerMessages["player-joined"]>),
+                            )
+                        }
+                    })
+                } else {
+                    console.error(`Cannot join game '${data.id}', game full`)
+                    response = { error: "Failed to join, game full" }
+                }
+            } else {
+                console.error(`Failed to find game '${data.id}'`)
+                response = { error: `Failed to find game '${data.id}' to join` }
+            }
+        } else {
+            console.error("Missing data from join request")
+            response = { error: `Missing data from join request` }
         }
-        // const realMessage = msg as MessageInterface["join-game"]
-        // console.log("Joined game", realMessage.data.id)
-        // const game = gameManager.games.find(
-        //     (game) => game.name === realMessage.data.id,
-        // )
-        // if (game) {
-        //     if (game.players.length < game.options.maxPlayers) {
-        //         gameManager.join(ws, game, realMessage.data)
-        //     } else {
-        //         console.error(
-        //             `Cannot join game '${realMessage.data.id}', game full`,
-        //         )
-        //         sendError(ws, "join-game-response", "Failed to join, game full")
-        //     }
-        // } else {
-        //     console.error(`Failed to find game '${realMessage.data.id}'`)
-        //     sendError(
-        //         ws,
-        //         "join-game-response",
-        //         "Failed to join, game not found",
-        //     )
-        // }
+
+        return response
     },
 }
 
@@ -291,7 +306,8 @@ const handleMessage: SocketMessageCallback = (ws, message, isBinary) => {
         }
         case "delete-game": {
             const response = clientMessageHandlers["delete-game"](
-                rawMessage.data as { name: string },
+                ws,
+                rawMessage.data as { id: string },
             )
             sendResponse(ws, "delete-game-response", response)
             break
@@ -305,10 +321,7 @@ const handleMessage: SocketMessageCallback = (ws, message, isBinary) => {
         case "join-game": {
             const response = clientMessageHandlers["join-game"](
                 ws,
-                rawMessage.data as {
-                    id: string
-                    sessionDescription: RTCSessionDescription
-                },
+                rawMessage.data as JoinGameData,
             )
             sendResponse(ws, "join-game-response", response)
             break
