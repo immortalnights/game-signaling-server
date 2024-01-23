@@ -1,6 +1,6 @@
 export class TicTakToe {
     spaces: (string | undefined)[]
-    lastPlayer: number | undefined
+    lastPlayer: string | undefined
 
     constructor() {
         this.spaces = new Array(9).fill(undefined)
@@ -20,12 +20,22 @@ export class TicTakToe {
         console.log(` ${v(6)} | ${v(7)} | ${v(8)} `)
     }
 
-    playerMove(player: number, position: number) {
-        if (player < 0 || player > 1) {
+    get availableMoves(): number[] {
+        return this.spaces
+            .map((value, index) => (!value ? index : undefined))
+            .filter((value) => value !== undefined) as number[]
+    }
+
+    finished() {
+        return !!this.calculateWinner() || this.availableMoves.length === 0
+    }
+
+    playerMove(token: string, position: number) {
+        if (token !== "O" && token !== "X") {
             throw Error("Invalid player")
         }
 
-        if (player === this.lastPlayer) {
+        if (token === this.lastPlayer) {
             throw Error("Incorrect player turn")
         }
 
@@ -37,8 +47,8 @@ export class TicTakToe {
             throw Error("Invalid position, space take")
         }
 
-        this.spaces[position] = player === 0 ? "O" : "X"
-        this.lastPlayer = player
+        this.spaces[position] = token
+        this.lastPlayer = token
     }
 
     calculateWinner() {
