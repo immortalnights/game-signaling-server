@@ -3,9 +3,11 @@ import {
     GameOptions,
     GameRecord,
     Response,
+    ServerMessages,
     ServerResponseMessages,
 } from "./signalingserver/types.js"
 import { RTCSessionDescription } from "werift"
+import { PeerConnection } from "./PeerConnection.js"
 
 export class SignalingServerConnection {
     private ws?: WebSocket
@@ -17,12 +19,19 @@ export class SignalingServerConnection {
         this.handleErrorBind = this.handleError.bind(this)
     }
 
+    get connected() {
+        return this.ws?.readyState === WebSocket.OPEN
+    }
+
     /**
      *
      * @param name
      * @returns
      */
-    async waitForMessage<T>(name: keyof ServerResponseMessages): Promise<T> {
+    async waitForMessage<T>(
+        name: keyof ServerResponseMessages | keyof ServerMessages,
+        timeout: number = 30000,
+    ): Promise<T> {
         return new Promise((resolve, reject) => {
             const handleMessage = (data: RawData, isBinary: boolean) => {
                 this.ws?.off("error", this.handleError)
@@ -70,7 +79,7 @@ export class SignalingServerConnection {
             }
 
             this.ws.once("open", () => {
-                console.log("WebSocket opened")
+                console.debug("WebSocket opened")
 
                 if (this.ws) {
                     this.ws.off("error", handleFailedToConnect)
@@ -100,13 +109,25 @@ export class SignalingServerConnection {
     async host(
         name: string,
         sessionDescription: RTCSessionDescription,
+        // peerConnection: PeerConnection,
         options?: Omit<GameOptions, "name">,
     ): Promise<GameRecord> {
         // send "host-game", {name ,...options}
         return new Promise(async (resolve, reject) => {
+            // const sessionDescription = await peerConnection.offer()
             this.send("host-game", { name, options, sessionDescription })
 
-            this.waitForMessage("host-game-response").then(resolve, reject)
+            this.ws?.on("message", (data: RawData, isBinary: boolean) => {
+                const msg = this.handleMessage(data, isBinary)
+                if (msg.action === "player-joined") {
+                    // peerConnection.response()
+                }
+            })
+
+            this.waitForMessage<GameRecord>("host-game-response").then(
+                resolve,
+                reject,
+            )
         })
     }
 
