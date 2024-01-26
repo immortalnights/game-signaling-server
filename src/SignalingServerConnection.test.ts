@@ -7,7 +7,13 @@ const ss = new SignalingServerConnection("127.0.0.1:9001")
 await ss.connect("TestA")
 games = await ss.list()
 console.log("Games", games)
-hosted = await ss.host("MyGame", "abc", { maxPlayers: 2 })
+hosted = await ss.host(
+    "MyGame",
+    { sdp: "", type: "answer" },
+    {
+        maxPlayers: 2,
+    },
+)
 console.log("Hosted", hosted)
 games = await ss.list()
 console.log("Post host games", games)
