@@ -7,232 +7,143 @@ import {
     multiplayerServerAddress,
     takeTurn,
 } from "./cli.js"
-import { SignalingServerConnection } from "./SignalingServerConnection.js"
 import { PeerConnection } from "./PeerConnection.js"
-import { GameRecord } from "./signalingserver/types.js"
-
-class Game {
-    // TODO
-}
-
-class RemotePlayer {
-    async wait() {
-        return Promise.reject()
-    }
-}
-
-class AI {
-    randomNextMove(game: TicTakToe): number {
-        return game.availableMoves[
-            Math.floor(Math.random() * game.availableMoves.length)
-        ]
-    }
-}
+import { Game } from "./Game.js"
+import { Player } from "./Player.js"
+import { RemotePlayer } from "./RemotePlayer.js"
+import { AI } from "./AI.js"
+import { Lobby } from "./client/Lobby.js"
+import { throwError } from "./signalingserver/utils.js"
 
 enum State {
     MainMenu,
     ServerConnectionMenu,
-    ConnectingToServer,
+    ConnectingToLobby,
     MultiplayerMenu,
-    // HostMultiplayerGame,
+    HostMultiplayerGame,
     JoinGameMenu,
-    WaitingForOpponent,
-    WaitingForTurn,
+    WaitingForStart,
+    LocalPlayerTurn,
+    RemotePlayerTurn,
     GameOver,
 }
 
-class Player {
-    state: State
-    private host?: boolean
-    private ws?: SignalingServerConnection
-    private peerConnection?: PeerConnection
-    private multiplayerGame?: GameRecord
-
-    constructor() {
-        this.state = State.MainMenu
-    }
-
-    get token() {
-        return this.host ? "O" : "X"
-    }
-
-    get connected() {
-        return this.ws?.connected
-    }
-
-    close() {
-        if (this.ws) {
-            this.ws.disconnect()
-        }
-
-        if (this.peerConnection) {
-            this.peerConnection.close()
-        }
-    }
-
-    hostLocalGame() {
-        this.host = true
-    }
-
-    async connectToMultiplayerServer(address: string) {
-        this.ws = new SignalingServerConnection(address)
-        return this.ws.connect()
-    }
-
-    async hostMultiplayerGame(name: string) {
-        let res = false
-        this.host = true
-        if (this.ws) {
-            this.peerConnection = new PeerConnection()
-            this.multiplayerGame = await this.ws.host(
-                name,
-                this.peerConnection,
-                {
-                    maxPlayers: 2,
-                },
-            )
-
-            res = true
-        }
-
-        return res ? Promise.resolve() : Promise.reject()
-    }
-
-    async waitForOpponent() {
-        return this.ws
-            ? this.ws.waitForMessage("player-joined")
-            : Promise.reject()
-    }
-
-    async findMultiplayerGame() {
-        return this.ws ? this.ws.list() : Promise.reject()
-    }
-
-    async joinMultiplayerGame(game: GameRecord) {
-        const host = game.players.find((player) => player.host)
-
-        if (!host || !host.sessionDescription) {
-            throw Error("Failed to find host connection information in game")
-        }
-
-        this.peerConnection = new PeerConnection()
-        await this.peerConnection.answer(host?.sessionDescription)
-        await this.peerConnection.
-    }
-}
-
+let state: State = State.MainMenu
+// TODO player should be owned by Lobby if multiplayer
 let player = new Player()
-let game: undefined | TicTakToe
-let opponent: RemotePlayer | AI | undefined
+let lobby: Lobby | undefined
+let game: TicTakToe | undefined
 
 const reset = async () => {
     game = undefined
-    opponent = undefined
 
     // reset player
     if (player) {
         player.close()
         player = new Player()
     }
+
+    if (lobby) {
+        lobby?.disconnect()
+        lobby = undefined
+    }
+
     await setTimeout(2000)
+    state = State.MainMenu
 }
 
 let play = true
 while (play) {
-    switch (player.state) {
+    switch (state) {
         case State.MainMenu: {
             console.clear()
-            try {
-                const choice = await mainMenu()
+            const choice = await mainMenu()
 
-                switch (choice) {
-                    case "single-player": {
-                        console.log("Start a single player game")
-                        player.hostLocalGame()
-                        game = new TicTakToe()
-                        opponent = new AI()
-                        player.state = State.WaitingForTurn
-                        break
-                    }
-                    case "multiplayer": {
-                        const serverAddress = await multiplayerServerAddress()
-                        console.log(`Connection to ${serverAddress}...`)
-                        player.connectToMultiplayerServer(serverAddress)
-                        player.state = State.ConnectingToServer
-                        break
-                    }
+            switch (choice) {
+                case "single-player": {
+                    console.log("Start a single player game")
+                    game = new TicTakToe(player, "LocalGame")
+                    game.addPlayer(new AI())
+                    state = State.LocalPlayerTurn
+                    break
                 }
-            } catch (error) {
-                play = false
+                case "multiplayer": {
+                    const serverAddress = await multiplayerServerAddress()
+                    console.log(`Connection to ${serverAddress}...`)
+                    lobby = new Lobby(serverAddress, player)
+                    state = State.ConnectingToLobby
+                    break
+                }
+                case "quit": {
+                    play = false
+                    break
+                }
             }
             break
         }
-        case State.ConnectingToServer: {
-            console.log("Connecting to server...")
-
-            let timeout = 5000
-            while (!player.connected && timeout > 0) {
-                await setTimeout(500)
-                timeout -= 500
-            }
-
-            if (player.connected) {
-                console.log("Connected")
-                player.state = State.MultiplayerMenu
-            } else {
-                console.log("Failed to connect")
-                await reset()
-            }
+        case State.ConnectingToLobby: {
+            console.log("Connecting to lobby...")
+            // player.id =
+            await lobby?.connect(player.id, player.name)
+            state = State.MultiplayerMenu
             break
         }
         case State.MultiplayerMenu: {
-            try {
-                const choice = await multiplayerMenu()
-                switch (choice) {
-                    case "host-game": {
-                        try {
-                            await player.hostMultiplayerGame("MyGame")
-                            player.state = State.WaitingForOpponent
-                        } catch (error) {
-                            console.error("Failed to host multiplayer game")
-                        }
-                        break
-                    }
-                    case "join-game": {
-                        try {
-                            const games = await player.findMultiplayerGame()
-                            const choice = await joinGameMenu(games)
-                            if (choice) {
-                                await player.joinMultiplayerGame(
-                                    games.find((game) => game.id === choice),
-                                )
-                            } else {
-                                player.close()
-                                player.state = State.MainMenu
-                            }
-                        } catch (error) {
-                            console.error(
-                                `Failed to join multiplayer game ${error}`,
-                            )
-                            player.close()
-                            player.state = State.MainMenu
-                        }
-                        break
-                    }
+            const choice = await multiplayerMenu()
+            switch (choice) {
+                case "host-game": {
+                    const sessionDescription =
+                        await player.peerConnection.offer()
+                    await lobby?.host("MyGame", sessionDescription, {
+                        minPlayers: 2,
+                        maxPlayers: 2,
+                    })
+                    state = State.WaitingForStart
+                    break
                 }
-            } catch (error) {
-                player.close()
-                player.state = State.MainMenu
+                case "join-game": {
+                    const rooms = (await lobby?.list()) ?? []
+                    console.log("rooms", rooms)
+                    const choice = await joinGameMenu(rooms)
+                    const roomToJoin = rooms.find((room) => room.id === choice)
+                    if (roomToJoin) {
+                        const host =
+                            roomToJoin.players.find((player) => player.host) ??
+                            throwError("Failed to find host")
+
+                        if (!host.sessionDescription) {
+                            throw Error(
+                                "Room host does not have peer connection",
+                            )
+                        }
+
+                        const answer = await player.peerConnection.answer(
+                            host.sessionDescription,
+                        )
+                        await lobby?.join(roomToJoin, answer)
+                        state = State.WaitingForStart
+                    } else {
+                        await reset()
+                    }
+
+                    break
+                }
+                case "cancel": {
+                    await reset()
+                    break
+                }
             }
             break
         }
-        case State.WaitingForOpponent: {
-            console.log("Waiting for opponent")
-            try {
-                await player.waitForOpponent()
-            } catch (error) {
-                console.error("Failed to find an opponent")
-            }
+        case State.WaitingForStart: {
+            // console.log("Waiting for opponent")
+            await setTimeout(250)
+
+            // try {
+            //     await player.waitForOpponent()
+            // } catch (error) {
+            //     console.error("Failed to find an opponent")
+            // }
             // if (!game) {
             //     throw new Error("Invalid game for state")
             // }
@@ -261,7 +172,7 @@ while (play) {
             // }
             break
         }
-        case State.WaitingForTurn: {
+        case State.LocalPlayerTurn: {
             if (!game) {
                 throw new Error("Invalid game for state")
             }
@@ -269,17 +180,20 @@ while (play) {
             try {
                 game.render()
                 const move = await takeTurn(game.availableMoves)
-                game.playerMove(player.token, move)
+                await game.takeTurn(player, move)
 
                 if (game.finished()) {
-                    player.state = State.GameOver
+                    state = State.GameOver
                 } else {
-                    player.state = State.WaitingForOpponent
+                    state = State.RemotePlayerTurn
                 }
             } catch (error) {
                 console.log("Player has quit game", error)
-                reset()
+                await reset()
             }
+            break
+        }
+        case State.RemotePlayerTurn: {
             break
         }
         case State.GameOver: {

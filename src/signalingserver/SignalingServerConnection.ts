@@ -1,55 +1,56 @@
 import { WebSocket, RawData } from "ws"
+import { EventEmitter } from "node:events"
 import {
-    GameOptions,
-    GameRecord,
-    Response,
+    ClientMessages,
+    ServerMessageHandler,
     ServerMessages,
-    ServerResponseMessages,
-} from "./signalingserver/types.js"
-import { RTCSessionDescription } from "werift"
-import { PeerConnection } from "./PeerConnection.js"
+    ServerReplyMessages,
+} from "./message.js"
 
-export class SignalingServerConnection {
+export class SignalingServerConnection extends EventEmitter {
     private ws?: WebSocket
     address: string
     private handleErrorBind: (error: string) => void
+    private subscriptions: Partial<ServerMessageHandler>
 
     constructor(address: string) {
+        super()
         this.address = address
         this.handleErrorBind = this.handleError.bind(this)
+        this.subscriptions = {}
     }
 
     get connected() {
         return this.ws?.readyState === WebSocket.OPEN
     }
 
+    subscribe(handlers: Partial<ServerMessageHandler>) {
+        this.subscriptions = { ...this.subscriptions, ...handlers }
+    }
+
     /**
-     *
+     *FIXME replace with subscription!
      * @param name
      * @returns
      */
     async waitForMessage<T>(
-        name: keyof ServerResponseMessages | keyof ServerMessages,
+        name: keyof ServerReplyMessages,
         timeout: number = 30000,
     ): Promise<T> {
         return new Promise((resolve, reject) => {
             const handleMessage = (data: RawData, isBinary: boolean) => {
                 this.ws?.off("error", this.handleError)
 
-                const message = this.handleMessage(data, isBinary)
-                if (message.action === name) {
+                const message = this.handleMessageOLD(data, isBinary)
+                if (message.name === name) {
                     if (message.success) {
                         console.debug(`Received message '${name}'`)
-                        resolve(
-                            message.data as ServerResponseMessages[typeof name],
-                        )
+                        resolve(message.data as any)
                     } else {
                         reject(message.error)
                     }
                 } else {
-                    reject(
-                        `Received unexpected message '${message.action}' instead of '${name}'`,
-                    )
+                    console.debug(`Ignored unexpected message ${message.name}`)
                 }
             }
 
@@ -59,7 +60,7 @@ export class SignalingServerConnection {
             }
 
             console.debug(`Waiting for '${name}'`)
-            this.ws?.once("message", handleMessage)
+            this.ws?.on("message", handleMessage)
             this.ws?.once("error", handlerError)
         })
     }
@@ -69,7 +70,8 @@ export class SignalingServerConnection {
      * @param name
      * @returns
      */
-    async connect(name: string = ""): Promise<boolean> {
+    async connect(timeout: number = 30000): Promise<boolean> {
+        // FIXME connect with timeout, register, wait for registration response
         return new Promise((resolve, reject) => {
             this.ws = new WebSocket(`ws://${this.address}/`, {})
 
@@ -84,12 +86,13 @@ export class SignalingServerConnection {
                 if (this.ws) {
                     this.ws.off("error", handleFailedToConnect)
 
-                    this.send("register-player", { name })
                     this.ws.on("error", this.handleErrorBind)
                 }
 
                 resolve(true)
             })
+
+            this.ws.on("message", this.handleMessage.bind(this))
 
             this.ws.once("close", (code, reason) => {
                 console.log("WebSocket closed", code, reason)
@@ -99,96 +102,28 @@ export class SignalingServerConnection {
         })
     }
 
-    /**
-     *
-     * @param name
-     * @param sessionDescription
-     * @param options
-     * @returns
-     */
-    async host(
-        name: string,
-        sessionDescription: RTCSessionDescription,
-        // peerConnection: PeerConnection,
-        options?: Omit<GameOptions, "name">,
-    ): Promise<GameRecord> {
-        // send "host-game", {name ,...options}
-        return new Promise(async (resolve, reject) => {
-            // const sessionDescription = await peerConnection.offer()
-            this.send("host-game", { name, options, sessionDescription })
-
-            this.ws?.on("message", (data: RawData, isBinary: boolean) => {
-                const msg = this.handleMessage(data, isBinary)
-                if (msg.action === "player-joined") {
-                    // peerConnection.response()
-                }
-            })
-
-            this.waitForMessage<GameRecord>("host-game-response").then(
-                resolve,
-                reject,
-            )
-        })
-    }
-
-    /**
-     *
-     * @param name
-     */
-    async delete(name: string) {
-        return new Promise(async (resolve, reject) => {
-            this.send("delete-game", { id: name })
-
-            this.waitForMessage<void>("delete-game-response").then(
-                resolve,
-                reject,
-            )
-        })
-    }
-
-    /**
-     *
-     * @returns
-     */
-    async list(): Promise<GameRecord[]> {
-        return new Promise(async (resolve, reject) => {
-            this.send("list-games")
-
-            this.waitForMessage<GameRecord[]>("list-games-response").then(
-                resolve,
-                reject,
-            )
-        })
-    }
-
-    /**
-     *
-     * @param game
-     * @returns
-     */
-    async join(game: GameRecord): Promise<GameRecord> {
-        return Promise.reject()
-    }
-
     disconnect() {
         if (this.ws) {
-            this.ws.off("error", this.handleErrorBind)
+            this.ws.removeAllListeners()
             this.ws.close()
         }
     }
 
-    private send(name: string, data?: Object) {
+    send<T extends keyof ClientMessages>(
+        name: T,
+        data?: ClientMessages[T]["data"],
+    ) {
         if (this.ws) {
             this.ws.send(
                 JSON.stringify({
-                    action: name,
+                    name,
                     data: data,
                 }),
             )
         }
     }
 
-    private handleMessage(data: RawData, isBinary: boolean): Response<unknown> {
+    private handleMessageOLD(data: RawData, isBinary: boolean): any {
         console.log("WebSocket message", data.toString().length, isBinary)
 
         let json
@@ -196,7 +131,24 @@ export class SignalingServerConnection {
             json = JSON.parse(data.toString())
         } catch (err) {}
 
-        return json as Response<unknown>
+        return json as any
+    }
+
+    private handleMessage(data: RawData, isBinary: boolean): any {
+        const message = JSON.parse(data.toString())
+        if ("name" in message) {
+            console.debug("Received", message.name)
+
+            const name = message.name as keyof ServerMessageHandler
+            if (this.subscriptions[name]) {
+                // Unsure why the check is not preventing the TS error
+                this.subscriptions[name]!(message.data as any)
+            } else {
+                console.debug(`No handler for '${name}'`)
+            }
+        } else {
+            console.error("Message received without a name, discarded")
+        }
     }
 
     private handleError(error: string) {

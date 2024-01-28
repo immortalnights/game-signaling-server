@@ -7,6 +7,7 @@ import {
     MultiplayerMenuChoices,
 } from "./types.js"
 import { GameRecord } from "./signalingserver/types.js"
+import { throwError } from "./signalingserver/utils.js"
 
 export const mainMenu = async (): Promise<MainMenuChoices> => {
     const choice = await select({
@@ -31,16 +32,11 @@ export const mainMenu = async (): Promise<MainMenuChoices> => {
         ],
     })
 
-    if (
-        choice !== "quit" &&
-        !mainMenuChoices.includes(choice as MainMenuChoices)
-    ) {
+    if (!mainMenuChoices.includes(choice as MainMenuChoices)) {
         throw Error("Invalid choice from menu")
     }
 
-    return choice !== "quit"
-        ? Promise.resolve(choice as MainMenuChoices)
-        : Promise.reject()
+    return Promise.resolve(choice as MainMenuChoices)
 }
 
 export const multiplayerServerAddress = async () => {
@@ -73,16 +69,11 @@ export const multiplayerMenu = async () => {
         ],
     })
 
-    if (
-        choice !== "cancel" &&
-        !multiplayerMenuChoices.includes(choice as MultiplayerMenuChoices)
-    ) {
+    if (!multiplayerMenuChoices.includes(choice as MultiplayerMenuChoices)) {
         throw Error("Invalid choice from menu")
     }
 
-    return choice !== "cancel"
-        ? Promise.resolve(choice as MultiplayerMenuChoices)
-        : Promise.reject()
+    return Promise.resolve(choice as MultiplayerMenuChoices)
 }
 
 export const joinGameMenu = async (games: GameRecord[]) => {
@@ -90,7 +81,9 @@ export const joinGameMenu = async (games: GameRecord[]) => {
         message: "Tic-tac-toe: Join Game",
         choices: [
             ...games.map((game) => {
-                const host = game.players.find((player) => player.host)
+                const host =
+                    game.players.find((player) => player.host) ??
+                    throwError("Failed to find host")
 
                 return {
                     name: `${game.name} by ${host?.name ?? "unknown"}`,
@@ -107,7 +100,7 @@ export const joinGameMenu = async (games: GameRecord[]) => {
         ],
     })
 
-    return answer !== "cancel" ? Promise.resolve(answer) : Promise.reject()
+    return Promise.resolve(answer)
 }
 
 export const takeTurn = async (availableMoves: number[]) => {

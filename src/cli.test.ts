@@ -16,7 +16,9 @@ const games = [
         name: "A Game",
         players: [
             {
+                id: "A",
                 name: "The host",
+                ready: false,
                 sessionDescription: undefined,
                 host: true,
             },
@@ -28,7 +30,9 @@ const games = [
         name: "B Game",
         players: [
             {
+                id: "A",
                 name: "The host",
+                ready: false,
                 sessionDescription: undefined,
                 host: true,
             },

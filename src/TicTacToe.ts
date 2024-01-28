@@ -1,8 +1,14 @@
-export class TicTakToe {
+import { Game } from "./Game.js"
+import { Player } from "./Player.js"
+
+export class TicTakToe extends Game {
     spaces: (string | undefined)[]
     lastPlayer: string | undefined
 
-    constructor() {
+    constructor(host: Player, name: string, options?: object) {
+        super(host, name, {
+            maxPlayers: 2,
+        })
         this.spaces = new Array(9).fill(undefined)
     }
 
@@ -30,6 +36,20 @@ export class TicTakToe {
         return !!this.calculateWinner() || this.availableMoves.length === 0
     }
 
+    async takeTurn(player: Player, position: number) {
+        if (this.host === player) {
+            await this.playerMove("O", position)
+        } else {
+            await this.sendToHost({
+                action: "player-turn",
+                player: player.id,
+                data: {
+                    position,
+                },
+            })
+        }
+    }
+
     playerMove(token: string, position: number) {
         if (token !== "O" && token !== "X") {
             throw Error("Invalid player")
@@ -49,6 +69,17 @@ export class TicTakToe {
 
         this.spaces[position] = token
         this.lastPlayer = token
+
+        this.sendUpdate()
+    }
+
+    sendUpdate() {
+        this.sendToPlayers({
+            action: "game-update",
+            data: {
+                spaces: this.spaces,
+            },
+        })
     }
 
     calculateWinner() {

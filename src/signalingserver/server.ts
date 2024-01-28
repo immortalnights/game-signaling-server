@@ -1,358 +1,347 @@
-import { App, DEDICATED_COMPRESSOR_3KB, WebSocket } from "uWebSockets.js"
-import { randomString } from "../utilities.js"
 import { RTCSessionDescription } from "werift"
+import { WebSocket } from "uWebSockets.js"
+import { throwError } from "./utils.js"
+import { randomUUID } from "node:crypto"
 import {
-    ErrorResponse,
-    GameDescription,
-    GameOptions,
-    GameRecord,
-    JoinGameData,
-    Message,
-    PlayerRecord,
+    ClientMessage,
+    ClientMessages,
+    GeneralServerReplyMessage,
+    ServerMessage,
     ServerMessages,
-    ServerResponseMessages,
-    SuccessResponse,
-} from "./types.js"
+    ServerReplyMessage,
+    ServerReplyMessages,
+} from "./message.js"
+import { GameOptions, GameRecord, PlayerRecord } from "./types.js"
+import { UserData, app } from "./app.js"
 
-interface UserData {
+interface ServerPlayer extends PlayerRecord {
+    ws: WebSocket<UserData>
+    room?: string
+}
+
+export type ClientMessageHandler = {
+    [K in keyof ClientMessages]: (
+        player: ServerPlayer,
+        data: ClientMessages[K]["data"],
+    ) => ClientMessages[K]["reply"]
+}
+
+const broadcast = (
+    players: ServerPlayer[],
+    name: keyof ServerMessages,
+    dataOrCallback?: any, // FIXME
+    exclude: string[] = [],
+) => {
+    players.forEach((player) => {
+        if (!exclude.includes(player.id)) {
+            console.debug(`Broadcast ${name} to ${player.id}`)
+
+            let data
+            if (dataOrCallback instanceof Function) {
+                data = dataOrCallback(player)
+            } else {
+                data = dataOrCallback
+            }
+
+            player.ws.send(
+                JSON.stringify({
+                    name,
+                    data,
+                } satisfies ServerMessages[typeof name]),
+            )
+        }
+    })
+}
+
+// FIXME don't duplicate player data in Lobby and Room
+class Room implements GameRecord {
     id: string
-}
-
-interface ServerPlayerRecord extends PlayerRecord {
-    socket: WebSocket<{ id: string }>
-}
-
-interface ServerGameRecord extends GameRecord {
     name: string
-    players: ServerPlayerRecord[]
+    options: GameOptions
+    players: ServerPlayer[]
+
+    constructor(name: string, options: GameOptions, host: ServerPlayer) {
+        this.id = randomUUID()
+        this.name = name
+        this.options = options
+        this.players = [{ ...host, room: this.id, host: true }]
+    }
+
+    get host(): ServerPlayer {
+        return (
+            this.players.find((player) => player.host) ??
+            throwError("Failed to find host")
+        )
+    }
+
+    join(player: ServerPlayer, sessionDescription: RTCSessionDescription) {
+        player.room = this.id
+        this.players.push({ ...player })
+
+        broadcast(
+            this.players,
+            "room-player-connected",
+            (roomPlayer: ServerPlayer) => ({
+                id: player.id,
+                name: player.name,
+                sessionDescription: roomPlayer.host
+                    ? sessionDescription
+                    : undefined,
+            }),
+            [player.id],
+        )
+    }
+
+    serialize(): GameRecord {
+        const host = this.host
+
+        return {
+            id: this.id,
+            name: this.name,
+            players: this.players.map((player) => ({
+                id: player.id,
+                name: player.name,
+                ready: player.ready,
+                host: player.host,
+                sessionDescription: player.host
+                    ? player.sessionDescription
+                    : undefined,
+            })),
+            options: this.options,
+        }
+    }
 }
 
-class GameManager {
-    games: ServerGameRecord[]
+type LobbyMessageTypes =
+    | "player-join-lobby"
+    | "player-host-game"
+    | "player-list-games"
+    | "player-delete-game"
+    | "player-join-game"
+    | "player-leave-game"
+    | "player-change-ready-state"
+    | "player-start-game"
+
+class Lobby {
+    rooms: Room[]
+    players: ServerPlayer[]
+    private messageHandlers: Pick<ClientMessageHandler, LobbyMessageTypes>
 
     constructor() {
-        this.games = []
-    }
+        this.rooms = []
+        this.players = []
 
-    private serializeGame(game: ServerGameRecord) {
-        return {
-            ...game,
-            players: game.players.map((player) => {
-                return {
-                    name: player.name,
-                    sessionDescription: player.host
-                        ? player.sessionDescription
-                        : undefined,
-                    host: player.host,
-                }
-            }),
-        } satisfies GameRecord
-    }
-
-    get availableGames() {
-        return this.games
-            .filter((game) => game.players.length < game.options.maxPlayers)
-            .map((game) => this.serializeGame(game))
-    }
-
-    host(
-        socket: WebSocket<UserData>,
-        name: string,
-        sessionDescription: RTCSessionDescription,
-        options: GameOptions,
-    ): GameRecord {
-        const gameRecord = {
-            id: randomString(8),
-            name: name,
-            options,
-            players: [
-                {
-                    name: socket.getUserData().id,
-                    socket,
-                    sessionDescription,
-                    host: true,
-                } satisfies ServerPlayerRecord,
-            ],
-        } satisfies ServerGameRecord
-
-        console.log("hosted", gameRecord)
-
-        this.games.push(gameRecord)
-
-        return this.serializeGame(gameRecord)
-    }
-
-    join(
-        ws: WebSocket<UserData>,
-        game: ServerGameRecord,
-        sessionDescription: RTCSessionDescription,
-    ) {
-        const host = game.players.find((player) => player.host)
-        const newPlayerId = ws.getUserData().id
-
-        if (!host) {
-            throw Error(`Failed to find host for game ${game.name}`)
+        this.messageHandlers = {
+            "player-join-lobby": this.handlePlayerJoinLobby,
+            "player-host-game": this.handlePlayerHostGame,
+            "player-list-games": this.handlePlayerListGames,
+            "player-delete-game": this.handlePlayerDeleteGame,
+            "player-join-game": this.handlePlayerJoinGame,
+            "player-leave-game": this.handlePlayerLeaveGame,
+            "player-change-ready-state": this.handlePlayerChangeReadyState,
+            "player-start-game": this.handlePlayerStartGame,
         }
-
-        const playerRecord = {
-            name: newPlayerId,
-            host: false,
-            sessionDescription: sessionDescription,
-        }
-
-        // Add the player to the game
-        game.players.push({
-            ...playerRecord,
-            socket: ws,
-        } satisfies ServerPlayerRecord)
-
-        return game
     }
 
-    delete(game: ServerGameRecord) {
-        const index = this.games.indexOf(game)
+    getPlayer(ws: WebSocket<UserData>) {
+        return (
+            this.players.find((player) => player.ws === ws) ??
+            throwError(`Player '${ws.getUserData().id}' is not registered`)
+        )
+    }
 
+    join(player: ServerPlayer) {
+        this.players.push(player)
+
+        broadcast(
+            this.players,
+            "lobby-player-connected",
+            {
+                id: player.id,
+                name: player.name,
+            },
+            [player.id],
+        )
+    }
+
+    // Leave lobby (disconnect)
+    leave(player: ServerPlayer) {}
+
+    disconnected(ws: WebSocket<UserData>) {
+        const index = this.players.findIndex((player) => player.ws === ws)
         if (index !== -1) {
-            const deleted = this.games.splice(index, 1)
-            console.debug("deleted", deleted)
-        }
-    }
-}
+            const player = this.players[index]
 
-interface MessageHandlerError {
-    error: string
-}
+            this.players.splice(index, 1)
 
-const sendResponse = (
-    ws: WebSocket<UserData>,
-    name: keyof ServerResponseMessages,
-    data?: object | MessageHandlerError,
-) => {
-    let responseData
-    if (data && "error" in data && data.error) {
-        responseData = {
-            success: false,
-            action: name,
-            data,
-        }
-    } else {
-        responseData = {
-            success: true,
-            action: name,
-            data,
+            broadcast(this.players, "lobby-player-disconnected", {
+                id: player.id,
+            })
         }
     }
 
-    ws.send(JSON.stringify(responseData))
-}
+    handleMessage(ws: WebSocket<UserData>, message: ClientMessage): void {
+        let player
+        if (message.name === "player-join-lobby") {
+            // TODO check the player doesn't already exist
 
-interface ClientMessageHandlers {
-    "register-player": (data: unknown) => Object | MessageHandlerError
-    "host-game": (
-        ws: WebSocket<UserData>,
-        data: GameDescription,
-    ) => GameRecord | MessageHandlerError
-    "delete-game": (
-        ws: WebSocket<UserData>,
-        data: { id: string },
-    ) => undefined | MessageHandlerError
-    "list-games": () => GameRecord[] | MessageHandlerError
-    "join-game": (
-        ws: WebSocket<UserData>,
-        data: {
-            id: string
-            sessionDescription: RTCSessionDescription
-        },
-    ) => GameRecord | MessageHandlerError
-}
-
-const clientMessageHandlers: ClientMessageHandlers = {
-    "register-player": (data) => {
-        return {
-            msg: "Unimplemented",
-        }
-    },
-    "host-game": (ws, data) => {
-        let response
-        if (data.name && data.sessionDescription) {
-            response = gameManager.host(
+            player = {
                 ws,
-                data.name,
-                data.sessionDescription,
-                data.options,
+                id: ws.getUserData().id,
+                name: "noname",
+                host: false,
+                ready: false,
+                sessionDescription: undefined,
+            } satisfies ServerPlayer
+        } else {
+            player = lobby.getPlayer(ws)
+        }
+
+        const name = message.name as LobbyMessageTypes
+        if (this.messageHandlers[name]) {
+            let response = this.messageHandlers[name](
+                player,
+                message.data as any,
             )
 
-            console.debug("Game registered")
-        } else {
-            console.error("Missing required host data")
-            response = { error: "Missing required game data" }
-        }
-
-        return response
-    },
-    "delete-game": (ws, data) => {
-        let response
-        if (data.id) {
-            const game = gameManager.games.find((game) => game.id === data.id)
-            if (game) {
-                const host = game.players.find((player) => player.host)
-                if (host && host.socket === ws) {
-                    gameManager.delete(game)
-                } else {
-                    console.error(
-                        `Attempt to delete game from non-host '${
-                            ws.getUserData().id
-                        }'`,
-                    )
-                }
+            if (response) {
+                console.debug("Reply", response)
+                player.ws.send(JSON.stringify(response))
             } else {
-                console.error(`Failed to find game '${data.id}'`)
+                console.debug("No reply provided for", message.name)
             }
         }
+    }
 
-        return response
-    },
-    "list-games": () => {
-        console.debug(
-            `Have ${gameManager.availableGames.length} available games`,
+    private handlePlayerJoinLobby: ClientMessageHandler["player-join-lobby"] = (
+        player: ServerPlayer,
+        { name },
+    ) => {
+        type Reply = ClientMessages["player-join-lobby"]["reply"]
+
+        this.join(player)
+        return {
+            name: "player-join-lobby-reply" as const,
+            success: true,
+            data: {
+                id: player.id,
+            },
+        } satisfies Reply
+    }
+
+    private handlePlayerHostGame: ClientMessageHandler["player-host-game"] = (
+        player,
+        { name, options, sessionDescription },
+    ) => {
+        type Reply = ClientMessages["player-host-game"]["reply"]
+
+        // Must update host with sessionDescription as room copies PlayerRecord
+        player.sessionDescription = sessionDescription
+
+        const room = new Room(
+            name,
+            { maxPlayers: 2, minPlayers: 2, ...options },
+            player,
         )
 
-        return gameManager.availableGames
-    },
-    "join-game": (ws, data) => {
-        let response
-        if (data.id && data.sessionDescription) {
-            const game = gameManager.games.find((game) => game.id === data.id)
-            if (game) {
-                if (game.players.length < game.options.maxPlayers) {
-                    response = gameManager.join(
-                        ws,
-                        game,
-                        data.sessionDescription,
-                    )
+        this.rooms.push(room)
 
-                    // Send the game to the new player
-                    sendResponse(ws, "join-game-response", response)
+        // TODO broadcast to all connected clients (to avoid polling)
 
-                    // Send the player to the other players
-                    const newPlayer = response.players.find(
-                        (player) => player.socket === ws,
-                    )
+        return {
+            name: "player-host-game-reply" as const,
+            success: true,
+            data: room.serialize(),
+        } satisfies Reply
+    }
 
-                    response.players.map((player) => {
-                        if (newPlayer && player.socket !== ws) {
-                            player.socket.send(
-                                JSON.stringify({
-                                    success: true,
-                                    action: "player-joined",
-                                    data: newPlayer,
-                                } satisfies SuccessResponse<ServerMessages["player-joined"]>),
-                            )
-                        }
-                    })
-                } else {
-                    console.error(`Cannot join game '${data.id}', game full`)
-                    response = { error: "Failed to join, game full" }
-                }
+    private handlePlayerListGames: ClientMessageHandler["player-list-games"] = (
+        player,
+    ) => {
+        type Reply = ClientMessages["player-list-games"]["reply"]
+
+        const games = this.rooms.map((room) => room.serialize())
+
+        return {
+            name: "player-list-games-reply" as const,
+            success: true,
+            data: { games },
+        } satisfies Reply
+    }
+
+    private handlePlayerDeleteGame: ClientMessageHandler["player-delete-game"] =
+        (player, { id: gameId }) => {
+            //TODO broadcast
+        }
+
+    private handlePlayerJoinGame: ClientMessageHandler["player-join-game"] = (
+        player,
+        { id: gameId, sessionDescription },
+    ) => {
+        type Reply = ClientMessages["player-join-game"]["reply"]
+
+        const room = this.rooms.find((room) => room.id === gameId)
+
+        let reply
+        if (room) {
+            if (room.players.length < room.options.maxPlayers) {
+                room.join(player, sessionDescription)
+
+                reply = {
+                    name: "player-join-game-reply",
+                    success: true,
+                    data: room.serialize(),
+                } satisfies Reply
             } else {
-                console.error(`Failed to find game '${data.id}'`)
-                response = { error: `Failed to find game '${data.id}' to join` }
+                reply = {
+                    name: "player-join-game-reply" as const,
+                    success: false,
+                    error: "Cannot join room, room is full",
+                } satisfies Reply
             }
         } else {
-            console.error("Missing data from join request")
-            response = { error: `Missing data from join request` }
+            reply = {
+                name: "player-join-game-reply" as const,
+                success: false,
+                error: "Room does not exist",
+            } satisfies Reply
         }
 
-        return response
+        return reply
+    }
+
+    private handlePlayerLeaveGame: ClientMessageHandler["player-leave-game"] = (
+        player,
+    ) => {}
+
+    private handlePlayerChangeReadyState: ClientMessageHandler["player-change-ready-state"] =
+        (player) => {}
+
+    private handlePlayerStartGame: ClientMessageHandler["player-start-game"] = (
+        player,
+    ) => {}
+}
+
+const lobby = new Lobby()
+
+app({
+    onOpen(ws) {
+        console.log("Client connected")
+        ws.getUserData().id = randomUUID()
     },
-}
-
-const gameManager = new GameManager()
-
-type SocketMessageCallback = (
-    ws: WebSocket<UserData>,
-    message: ArrayBuffer,
-    isBinary: boolean,
-) => void | Promise<void>
-
-const handleMessage: SocketMessageCallback = (ws, message, isBinary) => {
-    const rawMessage = JSON.parse(
-        Buffer.from(message).toString(),
-    ) as Message<unknown>
-
-    console.log("Client message", rawMessage.action)
-
-    const validMessages = Object.keys(clientMessageHandlers)
-    if (!validMessages.includes(rawMessage.action)) {
-        throw Error(`Received unexpected message '${rawMessage.action}'`)
-        //     const resp = clientMessageHandlers[rawMessage.action](
-        //         ws,
-        //         rawMessage.data as GameDescription,
-        //     )
-        //     sendResponse(ws, "host-game-response", resp)
-    }
-
-    switch (rawMessage.action) {
-        case "register-player": {
-            break
-        }
-        case "host-game": {
-            const response = clientMessageHandlers["host-game"](
-                ws,
-                rawMessage.data as GameDescription,
+    onMessage(ws, data, isBinary) {
+        const message = JSON.parse(Buffer.from(data).toString())
+        if ("name" in message) {
+            console.debug(
+                `Received ${message.name} from ${ws.getUserData().id}`,
             )
-            sendResponse(ws, "host-game-response", response)
-            break
+            lobby.handleMessage(ws, message)
+        } else {
+            console.error("Message received without a name, discarded")
         }
-        case "delete-game": {
-            const response = clientMessageHandlers["delete-game"](
-                ws,
-                rawMessage.data as { id: string },
-            )
-            sendResponse(ws, "delete-game-response", response)
-            break
-        }
-        case "list-games": {
-            const response = clientMessageHandlers["list-games"]()
-
-            sendResponse(ws, "list-games-response", response)
-            break
-        }
-        case "join-game": {
-            const response = clientMessageHandlers["join-game"](
-                ws,
-                rawMessage.data as JoinGameData,
-            )
-            sendResponse(ws, "join-game-response", response)
-            break
-        }
-    }
-}
-
-const app = App({})
-    .ws<UserData>("/*", {
-        idleTimeout: 32,
-        maxBackpressure: 1024,
-        maxPayloadLength: undefined, // default
-        compression: DEDICATED_COMPRESSOR_3KB,
-
-        open(ws) {
-            console.log("Client connected")
-            const userData = ws.getUserData()
-            userData.id = randomString()
-        },
-
-        message: handleMessage,
-
-        close(ws, code, message) {
-            console.log("Client disconnected")
-        },
-    })
-    .get("/*", (res, req) => {
-        res.writeStatus("400 OK").end("Websocket Server Only")
-    })
-    .listen(9001, (listenSocket) => {
-        if (listenSocket) {
-            console.log("Listening to port 9001")
-        }
-    })
+    },
+    onClose(ws, code, message) {
+        console.log("Client disconnected", code, message)
+        lobby.disconnected(ws)
+    },
+})
