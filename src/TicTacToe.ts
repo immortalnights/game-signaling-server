@@ -1,14 +1,20 @@
-import { Game } from "./Game.js"
+import { Game, GameState } from "./Game.js"
 import { Player } from "./Player.js"
+import { GameOptions } from "./signalingserver/types.js"
 
 export class TicTakToe extends Game {
+    token: "O" | "X"
     spaces: (string | undefined)[]
     lastPlayer: string | undefined
 
-    constructor(host: Player, name: string, options?: object) {
-        super(host, name, {
-            maxPlayers: 2,
-        })
+    constructor(
+        host: string,
+        players: Player[],
+        name: string,
+        options: GameOptions,
+    ) {
+        super(host, players, name, options)
+        this.token = this.host.local === true ? "O" : "X"
         this.spaces = new Array(9).fill(undefined)
     }
 
@@ -32,25 +38,52 @@ export class TicTakToe extends Game {
             .filter((value) => value !== undefined) as number[]
     }
 
+    get getState() {
+        return {
+            state: this.state,
+            spaces: this.spaces,
+            turn: 0, // TODO turn counter
+            currentPlayer: undefined,
+        }
+    }
+
     finished() {
         return !!this.calculateWinner() || this.availableMoves.length === 0
     }
 
-    async takeTurn(player: Player, position: number) {
-        if (this.host === player) {
-            await this.playerMove("O", position)
+    protected actionPlayerInput(player: Player, input: object): void {
+        if (this.host) {
+            // Apply the turn
+
+            // player.id === this.host.id ? "O" : "X"
+            this.takePlayerTurn(this.token, input.position)
+
+            const winner = this.calculateWinner()
+            if (winner) {
+                this.state = GameState.Finished
+            }
+
+            // Send the update
+            this.sendGameUpdate({ ...this.getState, winner })
         } else {
-            await this.sendToHost({
-                action: "player-turn",
-                player: player.id,
-                data: {
-                    position,
-                },
-            })
+            console.error("None host attempted to action player input")
         }
     }
 
-    playerMove(token: string, position: number) {
+    protected handleGameUpdate(update: object): void {
+        if (!this.host) {
+        } else {
+            console.error("Host received game update")
+        }
+    }
+
+    async takeTurn(player: Player, position: number) {
+        this.handlePlayerInput(player, {
+            move: position,
+        })
+    }
+
+    takePlayerTurn(token: string, position: number) {
         if (token !== "O" && token !== "X") {
             throw Error("Invalid player")
         }
@@ -70,16 +103,7 @@ export class TicTakToe extends Game {
         this.spaces[position] = token
         this.lastPlayer = token
 
-        this.sendUpdate()
-    }
-
-    sendUpdate() {
-        this.sendToPlayers({
-            action: "game-update",
-            data: {
-                spaces: this.spaces,
-            },
-        })
+        this.sendGameUpdate()
     }
 
     calculateWinner() {
