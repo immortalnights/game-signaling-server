@@ -1,17 +1,13 @@
-import { PeerConnection } from "./PeerConnection.js"
+import { randomUUID } from "node:crypto"
 
 export class Player {
     id: string
     name: string
-    peerConnection: PeerConnection
+    ready: boolean
 
-    constructor(name?: string) {
-        this.id = "LocalPlayer"
-        this.name = name ?? `Player ${Math.floor(Math.random() * 10)}`
-        this.peerConnection = new PeerConnection()
-    }
-
-    close() {
-        this.peerConnection.close()
+    constructor(id: string | undefined, name: string) {
+        this.id = id ?? randomUUID()
+        this.name = name
+        this.ready = false
     }
 }

@@ -1,3 +1,3 @@
-import { Opponent } from "./Opponent.js"
+import { Player } from "./Player.js"
 
-export class RemotePlayer extends Opponent {}
+export class RemotePlayer extends Player {}
