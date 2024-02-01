@@ -1,12 +1,13 @@
 import select, { Separator } from "@inquirer/select"
 import input from "@inquirer/input"
+import { setTimeout } from "node:timers/promises"
 import {
     mainMenuChoices,
     multiplayerMenuChoices,
     type MainMenuChoices,
     MultiplayerMenuChoices,
 } from "./types.js"
-import { GameRecord } from "./signalingserver/types.js"
+import { RoomRecord } from "./signalingserver/types.js"
 import { throwError } from "./signalingserver/utils.js"
 
 export const mainMenu = async (): Promise<MainMenuChoices> => {
@@ -76,7 +77,7 @@ export const multiplayerMenu = async () => {
     return Promise.resolve(choice as MultiplayerMenuChoices)
 }
 
-export const joinGameMenu = async (games: GameRecord[]) => {
+export const joinGameMenu = async (games: RoomRecord[]) => {
     const answer = await select({
         message: "Tic-tac-toe: Join Game",
         choices: [
@@ -116,5 +117,3 @@ export const takeTurn = async (availableMoves: number[]) => {
 
     return move !== "quit" ? Promise.resolve(Number(move)) : Promise.reject()
 }
-
-const waitForOpponent = () => {}
