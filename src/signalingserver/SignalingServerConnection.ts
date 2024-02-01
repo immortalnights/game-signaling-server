@@ -1,5 +1,4 @@
 import { WebSocket, RawData } from "ws"
-import { EventEmitter } from "node:events"
 import {
     ClientMessages,
     ServerMessageHandler,
@@ -7,14 +6,13 @@ import {
     ServerReplyMessages,
 } from "./message.js"
 
-export class SignalingServerConnection extends EventEmitter {
+export class SignalingServerConnection {
     private ws?: WebSocket
     address: string
     private handleErrorBind: (error: string) => void
     private subscriptions: Partial<ServerMessageHandler>
 
     constructor(address: string) {
-        super()
         this.address = address
         this.handleErrorBind = this.handleError.bind(this)
         this.subscriptions = {}
