@@ -2,16 +2,8 @@ import { RTCSessionDescription } from "werift"
 import { WebSocket } from "uWebSockets.js"
 import { throwError } from "./utils.js"
 import { randomUUID } from "node:crypto"
-import {
-    ClientMessage,
-    ClientMessages,
-    GeneralServerReplyMessage,
-    ServerMessage,
-    ServerMessages,
-    ServerReplyMessage,
-    ServerReplyMessages,
-} from "./message.js"
-import { GameOptions, GameRecord, PlayerRecord } from "./types.js"
+import { ClientMessage, ClientMessages, ServerMessages } from "./message.js"
+import { GameOptions, RoomRecord, PlayerRecord, RoomState } from "./types.js"
 import { UserData, app } from "./app.js"
 
 interface ServerPlayer extends PlayerRecord {
@@ -26,43 +18,37 @@ export type ClientMessageHandler = {
     ) => ClientMessages[K]["reply"]
 }
 
-const broadcast = (
+const broadcast = <T extends keyof ServerMessages>(
     players: ServerPlayer[],
-    name: keyof ServerMessages,
-    dataOrCallback?: any, // FIXME
+    name: ServerMessages[T]["name"],
+    data: ServerMessages[T]["data"],
     exclude: string[] = [],
 ) => {
     players.forEach((player) => {
         if (!exclude.includes(player.id)) {
             console.debug(`Broadcast ${name} to ${player.id}`)
-
-            let data
-            if (dataOrCallback instanceof Function) {
-                data = dataOrCallback(player)
-            } else {
-                data = dataOrCallback
-            }
-
             player.ws.send(
                 JSON.stringify({
                     name,
                     data,
-                } satisfies ServerMessages[typeof name]),
+                }),
             )
         }
     })
 }
 
 // FIXME don't duplicate player data in Lobby and Room
-class Room implements GameRecord {
+class Room implements RoomRecord {
     id: string
     name: string
+    state: RoomState
     options: GameOptions
     players: ServerPlayer[]
 
     constructor(name: string, options: GameOptions, host: ServerPlayer) {
         this.id = randomUUID()
         this.name = name
+        this.state = RoomState.Open
         this.options = options
         this.players = [{ ...host, room: this.id, host: true }]
     }
@@ -81,32 +67,31 @@ class Room implements GameRecord {
         broadcast(
             this.players,
             "room-player-connected",
-            (roomPlayer: ServerPlayer) => ({
-                id: player.id,
-                name: player.name,
-                sessionDescription: roomPlayer.host
-                    ? sessionDescription
-                    : undefined,
-            }),
+            this.serializePlayer(player),
             [player.id],
         )
     }
 
-    serialize(): GameRecord {
+    private serializePlayer(player: ServerPlayer): PlayerRecord {
+        return {
+            id: player.id,
+            name: player.name,
+            ready: player.ready,
+            host: player.host,
+            sessionDescription: player.host
+                ? player.sessionDescription
+                : undefined,
+        }
+    }
+
+    serialize(): RoomRecord {
         const host = this.host
 
         return {
             id: this.id,
             name: this.name,
-            players: this.players.map((player) => ({
-                id: player.id,
-                name: player.name,
-                ready: player.ready,
-                host: player.host,
-                sessionDescription: player.host
-                    ? player.sessionDescription
-                    : undefined,
-            })),
+            state: this.state,
+            players: this.players.map(this.serializePlayer),
             options: this.options,
         }
     }
@@ -315,7 +300,9 @@ class Lobby {
     ) => {}
 
     private handlePlayerChangeReadyState: ClientMessageHandler["player-change-ready-state"] =
-        (player) => {}
+        (player, { id, ready }) => {
+            player.ready = ready
+        }
 
     private handlePlayerStartGame: ClientMessageHandler["player-start-game"] = (
         player,

@@ -1,8 +1,6 @@
 import { RTCSessionDescription } from "werift"
-import { WebSocket } from "uWebSockets.js"
-import { GameOptions, GameRecord } from "./types.js"
+import { GameOptions, RoomRecord, PlayerRecord } from "./types.js"
 import { Prettify } from "./utils.js"
-import { UserData } from "./app.js"
 
 export interface ClientMessage {
     name: string
@@ -88,15 +86,15 @@ export interface ServerReplyMessages {
     >
     "player-host-game-reply": ServerReplyMessage<
         "player-host-game-reply",
-        GameRecord
+        RoomRecord
     >
     "player-list-games-reply": ServerReplyMessage<
         "player-list-games-reply",
-        { games: GameRecord[] }
+        { games: RoomRecord[] }
     >
     "player-join-game-reply": ServerReplyMessage<
         "player-join-game-reply",
-        GameRecord
+        RoomRecord
     >
 }
 
@@ -126,11 +124,7 @@ export interface ServerMessages {
     }
     "room-player-connected": {
         name: "room-player-connected"
-        data: {
-            id: string
-            name: string
-            sessionDescription?: RTCSessionDescription
-        }
+        data: PlayerRecord
     }
     "room-player-disconnected": {
         name: "room-player-disconnected"

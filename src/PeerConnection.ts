@@ -4,9 +4,17 @@ import {
     RTCSessionDescription,
 } from "werift"
 
+export interface PeerMessage {
+    name: string
+    player?: string
+    data?: object
+}
+export type PeerConnectionMessageCallback = (data: PeerMessage) => void
+
 export class PeerConnection {
     pc: RTCPeerConnection
     private dc?: RTCDataChannel
+    private onMessage?: PeerConnectionMessageCallback
 
     constructor() {
         this.pc = new RTCPeerConnection({})
@@ -17,6 +25,10 @@ export class PeerConnection {
         this.pc.onDataChannel.subscribe((channel) => {
             this.subscribeToDataChannel(channel)
         })
+    }
+
+    subscribe(onMessage: PeerConnectionMessageCallback) {
+        this.onMessage = onMessage
     }
 
     async offer(name: string = "default"): Promise<RTCSessionDescription> {
@@ -60,7 +72,10 @@ export class PeerConnection {
         })
 
         this.dc.message.subscribe((data) => {
-            console.log("dc.message", data.toString())
+            const json = JSON.parse(data.toString())
+            if ("name" in json) {
+                this.onMessage?.(json as PeerMessage)
+            }
         })
 
         this.dc.error.subscribe((err) => console.error)

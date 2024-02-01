@@ -1,4 +1,5 @@
 import { setTimeout } from "node:timers/promises"
+import { randomUUID } from "node:crypto"
 import { TicTakToe } from "./TicTacToe.js"
 import {
     joinGameMenu,
@@ -8,12 +9,14 @@ import {
     takeTurn,
 } from "./cli.js"
 import { PeerConnection } from "./PeerConnection.js"
-import { Game } from "./Game.js"
+import { Game, GameState } from "./Game.js"
 import { Player } from "./Player.js"
 import { RemotePlayer } from "./RemotePlayer.js"
 import { AI } from "./AI.js"
 import { Lobby } from "./client/Lobby.js"
 import { throwError } from "./signalingserver/utils.js"
+import { LocalPlayer } from "./LocalPlayer.js"
+import { RoomState } from "./signalingserver/types.js"
 
 enum State {
     MainMenu,
@@ -22,15 +25,16 @@ enum State {
     MultiplayerMenu,
     HostMultiplayerGame,
     JoinGameMenu,
-    WaitingForStart,
+    LobbyRoom,
+    // Game world initialization and player connection checks
+    CreateGame,
     LocalPlayerTurn,
     RemotePlayerTurn,
     GameOver,
 }
 
 let state: State = State.MainMenu
-// TODO player should be owned by Lobby if multiplayer
-let player = new Player()
+let player = new LocalPlayer(`Player ${Math.floor(Math.random() * 10)}`)
 let lobby: Lobby | undefined
 let game: TicTakToe | undefined
 
@@ -40,7 +44,6 @@ const reset = async () => {
     // reset player
     if (player) {
         player.close()
-        player = new Player()
     }
 
     if (lobby) {
@@ -62,15 +65,22 @@ while (play) {
             switch (choice) {
                 case "single-player": {
                     console.log("Start a single player game")
-                    game = new TicTakToe(player, "LocalGame")
-                    game.addPlayer(new AI())
+                    game = new TicTakToe(
+                        player.id,
+                        [player, new AI()],
+                        "LocalGame",
+                        {
+                            minPlayers: 2,
+                            maxPlayers: 2,
+                        },
+                    )
                     state = State.LocalPlayerTurn
                     break
                 }
                 case "multiplayer": {
                     const serverAddress = await multiplayerServerAddress()
                     console.log(`Connection to ${serverAddress}...`)
-                    lobby = new Lobby(serverAddress, player)
+                    lobby = new Lobby(serverAddress)
                     state = State.ConnectingToLobby
                     break
                 }
@@ -83,8 +93,7 @@ while (play) {
         }
         case State.ConnectingToLobby: {
             console.log("Connecting to lobby...")
-            // player.id =
-            await lobby?.connect(player.id, player.name)
+            await lobby?.connect(player)
             state = State.MultiplayerMenu
             break
         }
@@ -92,13 +101,11 @@ while (play) {
             const choice = await multiplayerMenu()
             switch (choice) {
                 case "host-game": {
-                    const sessionDescription =
-                        await player.peerConnection.offer()
-                    await lobby?.host("MyGame", sessionDescription, {
+                    await lobby?.host("MyGame", {
                         minPlayers: 2,
                         maxPlayers: 2,
                     })
-                    state = State.WaitingForStart
+                    state = State.LobbyRoom
                     break
                 }
                 case "join-game": {
@@ -121,7 +128,7 @@ while (play) {
                             host.sessionDescription,
                         )
                         await lobby?.join(roomToJoin, answer)
-                        state = State.WaitingForStart
+                        state = State.LobbyRoom
                     } else {
                         await reset()
                     }
@@ -135,9 +142,72 @@ while (play) {
             }
             break
         }
-        case State.WaitingForStart: {
-            // console.log("Waiting for opponent")
-            await setTimeout(250)
+        case State.LobbyRoom: {
+            if (!lobby) {
+                throw Error("Missing lobby for state")
+            } else if (!lobby.room) {
+                throw Error("Missing room for state")
+            }
+
+            const room = lobby.room
+
+            let duration = 0
+            let frame = 250
+            // Wait for the room to change state, or timeout after 30 seconds
+            while (
+                (room.state === RoomState.Open ||
+                    room.state === RoomState.Closed) &&
+                duration < 5000
+            ) {
+                console.clear()
+
+                if (room.host) {
+                    if (room.players.length === 2) {
+                        // Start the game
+                        console.log("START GAME HERE!")
+                        await setTimeout(frame)
+                    } else {
+                        console.log("Waiting for opponent...")
+                        await setTimeout(frame)
+                    }
+                } else {
+                    console.log("Waiting for game to start...")
+                    await setTimeout(frame)
+                }
+
+                duration += frame
+            }
+
+            if (room.state === RoomState.Complete) {
+                state = State.CreateGame
+            } else {
+                console.error("Failed to start or join game")
+                await reset()
+            }
+
+            //     if (room.players.length === 2) {
+            //         if (room.host) {
+            //             console.log("Game will start in ten seconds")
+            //             await setTimeout(10000)
+            //             room.startGame()
+            //         } else {
+            //             console.log("Waiting for game to start")
+            //             await setTimeout(250)
+            //             cont = game.state === GameState.Playing
+            //         }
+            //     } else {
+            //         console.log("Waiting for opponent")
+            //         await setTimeout(250)
+            //     }
+            // }
+
+            // if (room.state === GameState.Playing) {
+            //     if (game.host.id === player.id) {
+            //         state = State.LocalPlayerTurn
+            //     } else {
+            //         state = State.RemotePlayerTurn
+            //     }
+            // }
 
             // try {
             //     await player.waitForOpponent()
@@ -172,6 +242,20 @@ while (play) {
             // }
             break
         }
+        case State.CreateGame: {
+            if (!lobby || !lobby.room) {
+                throw Error("Invalid lobby or room")
+            }
+
+            game = new TicTakToe(
+                lobby.room.players,
+                lobby.room.name,
+                lobby.room.options,
+            )
+
+            await game.waitForReady()
+            break
+        }
         case State.LocalPlayerTurn: {
             if (!game) {
                 throw new Error("Invalid game for state")
@@ -194,6 +278,9 @@ while (play) {
             break
         }
         case State.RemotePlayerTurn: {
+            console.clear()
+            console.log("Waiting for opponent...")
+            await setTimeout(250)
             break
         }
         case State.GameOver: {

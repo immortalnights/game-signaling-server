@@ -1,11 +1,14 @@
 import {
     GameOptions,
-    GameRecord,
+    RoomRecord,
     PlayerRecord,
+    RoomState,
 } from "../signalingserver/types.js"
 import { SignalingServerConnection } from "../signalingserver/SignalingServerConnection.js"
 import { ServerMessageHandler } from "../signalingserver/message.js"
+import { LocalPlayer } from "../LocalPlayer.js"
 import { Player } from "../Player.js"
+import { RemotePlayer } from "../RemotePlayer.js"
 
 type RoomMessageType =
     | "room-player-connected"
@@ -15,26 +18,38 @@ type RoomMessageType =
 
 export class Room {
     ws: SignalingServerConnection
-    player: Player
     id: string
     name: string
+    state: RoomState
+    player: LocalPlayer
+    // Is the local player the host
     host: boolean
-    players: PlayerRecord[]
+    // Every player in the room
+    players: Player[]
     options: GameOptions
 
     constructor(
         ws: SignalingServerConnection,
-        player: Player,
+        roomData: RoomRecord,
+        player: LocalPlayer,
         host: boolean,
-        roomData: GameRecord,
     ) {
         this.ws = ws
         this.player = player
         this.id = roomData.id
         this.name = roomData.name
+        this.state = roomData.state
         this.host = host
-        this.players = roomData.players
+        this.players = [player]
         this.options = roomData.options
+
+        if (!host) {
+            roomData.players.forEach((player) => {
+                const remotePlayer = new RemotePlayer(player.id, player.name)
+                remotePlayer.ready = player.ready
+                this.players.push(remotePlayer)
+            })
+        }
 
         this.ws.subscribe({
             "room-player-connected": this.handlePlayerConnected,
@@ -44,6 +59,18 @@ export class Room {
         } satisfies Pick<ServerMessageHandler, RoomMessageType>)
     }
 
+    setReadyState(ready: boolean) {
+        const self = this.players.find((player) => player.id === this.player.id)
+        if (self) {
+            self.ready = true
+        }
+        this.ws.send("player-change-ready-state", { id: this.player.id, ready })
+    }
+
+    startGame() {
+        // TODO?
+    }
+
     private handlePlayerConnected: ServerMessageHandler["room-player-connected"] =
         ({ id, name, sessionDescription }) => {
             console.assert(
@@ -51,13 +78,7 @@ export class Room {
                 "Room has too many players",
             )
 
-            this.players.push({
-                id,
-                name,
-                ready: false,
-                sessionDescription,
-                host: false,
-            })
+            this.players.push(new RemotePlayer(id, name))
 
             if (this.host) {
                 if (sessionDescription) {
