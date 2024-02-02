@@ -17,6 +17,7 @@ import { Lobby } from "./client/Lobby.js"
 import { throwError } from "./signalingserver/utils.js"
 import { LocalPlayer } from "./LocalPlayer.js"
 import { RoomState } from "./signalingserver/types.js"
+import { program } from "commander"
 
 enum State {
     MainMenu,
@@ -38,6 +39,15 @@ let player = new LocalPlayer(`Player ${Math.floor(Math.random() * 10)}`)
 let lobby: Lobby | undefined
 let game: TicTakToe | undefined
 
+program
+    .option("--serverAddress <addr>", "Server IP or Hostname", "127.0.0.1:9001")
+    .option("--host", "Host a game (default options)")
+    .option("--join", "Join a game by name")
+    .option("--name <arg>", "Name of game room to host or join", "Quick-Game")
+    .parse(process.argv)
+
+const options = program.opts()
+
 const reset = async () => {
     game = undefined
 
@@ -53,6 +63,41 @@ const reset = async () => {
 
     await setTimeout(2000)
     state = State.MainMenu
+}
+
+if (options.join) {
+    try {
+        lobby = new Lobby(options.serverAddress)
+        console.log("Connecting to lobby...")
+        await lobby.connect(player)
+        const rooms = (await lobby.list()) ?? []
+        const autoJoinRoom = rooms.find((room) => room.name === options.name)
+        if (autoJoinRoom) {
+            console.log(`Joining game room '${options.name}'...`)
+            await lobby.join(autoJoinRoom)
+            state = State.LobbyRoom
+        } else {
+            console.error(`Failed to find game '${options.name}'`)
+            await setTimeout(2000)
+        }
+    } catch (err) {
+        console.error("Failed to join game")
+        await setTimeout(2000)
+    }
+} else if (options.host) {
+    try {
+        lobby = new Lobby(options.serverAddress)
+        console.log("Connecting to lobby...")
+        await lobby.connect(player)
+        await lobby.host(options.name, {
+            minPlayers: 2,
+            maxPlayers: 2,
+        })
+        state = State.LobbyRoom
+    } catch (err) {
+        console.error("Failed to host game")
+        await setTimeout(2000)
+    }
 }
 
 let play = true
@@ -114,20 +159,7 @@ while (play) {
                     const choice = await joinGameMenu(rooms)
                     const roomToJoin = rooms.find((room) => room.id === choice)
                     if (roomToJoin) {
-                        const host =
-                            roomToJoin.players.find((player) => player.host) ??
-                            throwError("Failed to find host")
-
-                        if (!host.sessionDescription) {
-                            throw Error(
-                                "Room host does not have peer connection",
-                            )
-                        }
-
-                        const answer = await player.peerConnection.answer(
-                            host.sessionDescription,
-                        )
-                        await lobby?.join(roomToJoin, answer)
+                        await lobby?.join(roomToJoin)
                         state = State.LobbyRoom
                     } else {
                         await reset()
@@ -159,20 +191,24 @@ while (play) {
                     room.state === RoomState.Closed) &&
                 duration < 5000
             ) {
+                await setTimeout(frame)
                 console.clear()
 
                 if (room.host) {
                     if (room.players.length === 2) {
-                        // Start the game
-                        console.log("START GAME HERE!")
-                        await setTimeout(frame)
+                        if (room.state === RoomState.Open) {
+                            console.log("Starting game...")
+                            // Start the game
+                            room.startGame()
+                        } else {
+                            // shouldn't get here...
+                            console.log("Stick in room?...")
+                        }
                     } else {
                         console.log("Waiting for opponent...")
-                        await setTimeout(frame)
                     }
                 } else {
                     console.log("Waiting for game to start...")
-                    await setTimeout(frame)
                 }
 
                 duration += frame
@@ -184,62 +220,6 @@ while (play) {
                 console.error("Failed to start or join game")
                 await reset()
             }
-
-            //     if (room.players.length === 2) {
-            //         if (room.host) {
-            //             console.log("Game will start in ten seconds")
-            //             await setTimeout(10000)
-            //             room.startGame()
-            //         } else {
-            //             console.log("Waiting for game to start")
-            //             await setTimeout(250)
-            //             cont = game.state === GameState.Playing
-            //         }
-            //     } else {
-            //         console.log("Waiting for opponent")
-            //         await setTimeout(250)
-            //     }
-            // }
-
-            // if (room.state === GameState.Playing) {
-            //     if (game.host.id === player.id) {
-            //         state = State.LocalPlayerTurn
-            //     } else {
-            //         state = State.RemotePlayerTurn
-            //     }
-            // }
-
-            // try {
-            //     await player.waitForOpponent()
-            // } catch (error) {
-            //     console.error("Failed to find an opponent")
-            // }
-            // if (!game) {
-            //     throw new Error("Invalid game for state")
-            // }
-
-            // if (!opponent) {
-            //     throw new Error("Invalid opponent for game")
-            // }
-
-            // let move
-            // let token
-            // if (opponent instanceof RemotePlayer) {
-            //     token = player.host ? "O" : "X"
-            //     move = await opponent.wait()
-            // } else {
-            //     token = "X"
-            //     move = opponent.randomNextMove(game)
-            //     console.log(`AI move ${move}`)
-            // }
-
-            // game.playerMove(token, move)
-
-            // if (game.finished()) {
-            //     player.state = State.GameOver
-            // } else {
-            //     player.state = State.WaitingForTurn
-            // }
             break
         }
         case State.CreateGame: {
@@ -248,10 +228,12 @@ while (play) {
             }
 
             game = new TicTakToe(
+                player.id,
                 lobby.room.players,
                 lobby.room.name,
                 lobby.room.options,
             )
+            state = State.LocalPlayerTurn
 
             await game.waitForReady()
             break
