@@ -16,8 +16,8 @@ type LobbyMessageTypes =
     | "server-error"
     | "lobby-player-connected"
     | "lobby-player-disconnected"
-    | "lobby-game-created"
-    | "lobby-game-deleted"
+    | "lobby-room-created"
+    | "lobby-room-deleted"
 
 export class Lobby {
     // local player's websocket connection
@@ -31,8 +31,8 @@ export class Lobby {
             "server-error": this.handleServerErrorLobby,
             "lobby-player-connected": this.handlePlayerConnected,
             "lobby-player-disconnected": this.handlePlayerDisconnected,
-            "lobby-game-created": this.handleGameRoomCreated,
-            "lobby-game-deleted": this.handleGameRoomDeleted,
+            "lobby-room-created": this.handleRoomCreated,
+            "lobby-room-deleted": this.handleRoomDeleted,
         } satisfies Pick<ServerMessageHandler, LobbyMessageTypes>)
     }
 
@@ -56,15 +56,17 @@ export class Lobby {
             console.log("Player disconnected", data)
         }
 
-    private handleGameRoomCreated: ServerMessageHandler["lobby-game-created"] =
-        (data) => {
-            console.log("Game room created", data)
-        }
+    private handleRoomCreated: ServerMessageHandler["lobby-room-created"] = (
+        data,
+    ) => {
+        console.log("Game room created", data)
+    }
 
-    private handleGameRoomDeleted: ServerMessageHandler["lobby-game-deleted"] =
-        (data) => {
-            console.log("Game room deleted", data)
-        }
+    private handleRoomDeleted: ServerMessageHandler["lobby-room-deleted"] = (
+        data,
+    ) => {
+        console.log("Game room deleted", data)
+    }
 
     async connect(
         player: LocalPlayer,
@@ -90,7 +92,7 @@ export class Lobby {
      * @param options
      * @returns
      */
-    async host(name: string, options?: GameOptions): Promise<void> {
+    async host(name: string, options?: GameOptions): Promise<Room> {
         if (!this.player) {
             throw new Error("Lobby missing local player")
         }
@@ -108,6 +110,7 @@ export class Lobby {
         // console.assert()
 
         this.room = new Room(this.ws!, data, this.player, true)
+        return this.room
     }
 
     /**
@@ -135,7 +138,7 @@ export class Lobby {
      * @param game
      * @returns
      */
-    async join(room: RoomRecord): Promise<void> {
+    async join(room: RoomRecord): Promise<Room> {
         if (!this.player) {
             throw new Error("Lobby missing local player")
         }
@@ -161,6 +164,7 @@ export class Lobby {
         )) as unknown as RoomRecord
 
         this.room = new Room(this.ws!, data, this.player, false)
+        return this.room
     }
 
     /**

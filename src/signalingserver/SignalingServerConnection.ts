@@ -48,7 +48,7 @@ export class SignalingServerConnection {
                         reject(message.error)
                     }
                 } else {
-                    console.debug(`Ignored unexpected message ${message.name}`)
+                    // console.debug(`Ignored unexpected message ${message.name}`)
                 }
             }
 

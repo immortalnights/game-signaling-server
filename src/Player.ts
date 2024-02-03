@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto"
 
 export class Player {
-    id: string
+    id: string | undefined
     name: string
     ready: boolean
+    host: boolean
 
     constructor(id: string | undefined, name: string) {
-        this.id = id ?? randomUUID()
+        this.id = id
         this.name = name
         this.ready = false
+        this.host = false
     }
 }

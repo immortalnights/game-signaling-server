@@ -1,4 +1,6 @@
 import { Game, GameState } from "./Game.js"
+import { LocalPlayer } from "./LocalPlayer.js"
+import { PeerConnection } from "./PeerConnection.js"
 import { Player } from "./Player.js"
 import { GameOptions } from "./signalingserver/types.js"
 
@@ -7,14 +9,9 @@ export class TicTakToe extends Game {
     spaces: (string | undefined)[]
     lastPlayer: string | undefined
 
-    constructor(
-        host: string,
-        players: Player[],
-        name: string,
-        options: GameOptions,
-    ) {
-        super(host, players, name, options)
-        this.token = this.host.local === true ? "O" : "X"
+    constructor(players: Player[], name: string, options: GameOptions) {
+        super(players, name, options)
+        this.token = true ? "O" : "X"
         this.spaces = new Array(9).fill(undefined)
     }
 
@@ -46,6 +43,8 @@ export class TicTakToe extends Game {
             currentPlayer: undefined,
         }
     }
+
+    async play() {}
 
     finished() {
         return !!this.calculateWinner() || this.availableMoves.length === 0

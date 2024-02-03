@@ -15,6 +15,7 @@ type RoomMessageType =
     | "room-player-disconnected"
     | "room-player-ready-change"
     | "room-start-game"
+    | "room-closed"
 
 export class Room {
     ws: SignalingServerConnection
@@ -56,6 +57,7 @@ export class Room {
             "room-player-disconnected": this.handlePlayerDisconnected,
             "room-player-ready-change": this.handlePlayerReadyChange,
             "room-start-game": this.handleStartGame,
+            "room-closed": this.handlerRoomClosed,
         } satisfies Pick<ServerMessageHandler, RoomMessageType>)
     }
 
@@ -81,13 +83,16 @@ export class Room {
                 "Room has too many players",
             )
 
+            console.debug(`Player '${name}' (${id}) has joined room`)
             this.players.push(new RemotePlayer(id, name))
 
             if (this.host) {
                 if (sessionDescription) {
                     this.player.peerConnection.response(sessionDescription)
                 } else {
-                    console.error("Player connected without RTC answer")
+                    console.error(
+                        "Player connected without RTC answer, expected by host",
+                    )
                 }
             }
         }
@@ -104,15 +109,23 @@ export class Room {
         ({ id, ready }) => {
             const player = this.players.find((player) => player.id === id)
             if (player) {
+                console.log(
+                    `Player '${player.name}' (${player.id}) is now ready`,
+                )
                 player.ready = ready
             } else {
                 console.error(
-                    `Failed to find expected player in room ${name} (${id})`,
+                    `Failed to find expected player '${id}' in room )`,
                 )
             }
         }
 
     private handleStartGame: ServerMessageHandler["room-start-game"] = () => {
         this.state = RoomState.Complete
+    }
+
+    private handlerRoomClosed: ServerMessageHandler["room-closed"] = () => {
+        console.log("Start game?")
+        this.state = RoomState.Closed
     }
 }

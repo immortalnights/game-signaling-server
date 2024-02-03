@@ -51,6 +51,9 @@ class Room implements RoomRecord {
         this.state = RoomState.Open
         this.options = options
         this.players = [host]
+
+        host.host = true
+        host.room = this.id
     }
 
     get host(): ServerPlayer {
@@ -62,7 +65,7 @@ class Room implements RoomRecord {
 
     join(player: ServerPlayer, sessionDescription: RTCSessionDescription) {
         player.room = this.id
-        this.players.push({ ...player })
+        this.players.push(player)
 
         broadcast(
             this.players,
@@ -73,25 +76,19 @@ class Room implements RoomRecord {
     }
 
     leave(player: ServerPlayer) {
+        console.debug(`Player '${player.name}' has left room '${this.name}'`)
+
+        deleteItemFromArray(this.players, player)
+
         player.room = undefined
 
-        const index = this.players.indexOf(player)
-        if (index !== -1) {
-            this.players.splice(index, 1)
-            console.log(`Player '${player.name}' has left room '${this.name}'`)
+        broadcast(this.players, "room-player-disconnected", {
+            id: player.id,
+        })
 
-            broadcast(this.players, "room-player-disconnected", {
-                id: player.id,
-            })
-
-            if (this.players.length === 0) {
-                console.debug(`Closing empty room '${this.name}'`)
-                this.state = RoomState.Closed
-            }
-        } else {
-            console.error(
-                `Failed to find player '${player.name}' in room '${this.name}'`,
-            )
+        if (this.players.length === 0) {
+            console.debug(`Closing empty room '${this.name}'`)
+            this.state = RoomState.Closed
         }
     }
 
@@ -130,6 +127,18 @@ type LobbyMessageTypes =
     | "player-change-ready-state"
     | "player-start-game"
 
+const deleteItemFromArray = <T>(array: T[], item: T): T[] | undefined => {
+    let deleted
+    const index = array.indexOf(item)
+    if (index === -1) {
+        console.error("Failed to find item in array")
+    } else {
+        deleted = array.splice(index, 1)
+    }
+
+    return deleted
+}
+
 class Lobby {
     rooms: Room[]
     players: ServerPlayer[]
@@ -158,6 +167,7 @@ class Lobby {
         )
     }
 
+    // Join the lobby
     join(player: ServerPlayer) {
         this.players.push(player)
 
@@ -172,51 +182,48 @@ class Lobby {
         )
     }
 
+    createRoom() {}
+
+    deleteRoom(room: Room) {
+        deleteItemFromArray(this.rooms, room)
+
+        broadcast(this.players, "lobby-room-deleted", {
+            id: room.id,
+        })
+    }
+
     // Leave lobby (disconnect)
-    leave(player: ServerPlayer) {}
+    leave(player: ServerPlayer) {
+        deleteItemFromArray(this.players, player)
+
+        broadcast(this.players, "lobby-player-disconnected", {
+            id: player.id,
+        })
+    }
 
     disconnected(ws: WebSocket<UserData>) {
-        const index = this.players.findIndex((player) => player.ws === ws)
-        if (index !== -1) {
-            const player = this.players[index]
-            this.players.splice(index, 1)
+        const player = this.players.find((player) => player.ws === ws)
+        if (player) {
+            this.leave(player)
 
             if (player.room) {
-                const roomIndex = this.rooms.findIndex(
-                    (room) => room.id === player.room,
-                )
-
-                if (roomIndex !== -1) {
-                    const room = this.rooms[roomIndex]
-                    console.debug(
-                        `Player '${player.name}' is in room '${room.name}'`,
+                const room =
+                    this.rooms.find((room) => room.id === player.room) ??
+                    throwError(
+                        `Failed to find room '${player.room}' for player '${player.id}'`,
                     )
 
-                    room.leave(player)
+                console.debug(
+                    `Player '${player.name}' is in room '${room.name}'`,
+                )
 
-                    if (room.state === RoomState.Closed) {
-                        broadcast(this.players, "lobby-game-deleted", {
-                            id: room.id,
-                        })
+                room.leave(player)
 
-                        this.players.forEach((lobbyPlayer) => {
-                            if (lobbyPlayer.room === room.id) {
-                                lobbyPlayer.room = undefined
-                            }
-                        })
-
-                        this.rooms.splice(roomIndex, 1)
-                    } else {
-                        broadcast(this.players, "lobby-player-disconnected", {
-                            id: player.id,
-                        })
-                    }
+                if (room.state === RoomState.Closed) {
+                    this.deleteRoom(room)
                 }
             } else {
                 console.debug(`Player '${player.name}' was not in a room'`)
-                broadcast(this.players, "lobby-player-disconnected", {
-                    id: player.id,
-                })
             }
         } else {
             console.error("Failed to find ServerPlayer for disconnected player")
@@ -287,13 +294,10 @@ class Lobby {
             player,
         )
 
-        // Update the player details
-        player.room = room.id
-        player.host = true
+        console.assert(player.host, "Player should now be a host!")
+        console.assert(player.ready === false, "Player should not be ready!")
 
         this.rooms.push(room)
-
-        // TODO broadcast to all connected clients (to avoid polling)
 
         return {
             name: "player-host-game-reply" as const,
@@ -334,6 +338,11 @@ class Lobby {
             if (room.players.length < room.options.maxPlayers) {
                 room.join(player, sessionDescription)
 
+                console.assert(
+                    player.ready === false,
+                    "Player should not be ready!",
+                )
+
                 reply = {
                     name: "player-join-game-reply",
                     success: true,
@@ -369,12 +378,10 @@ class Lobby {
 
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
-                broadcast(
-                    room.players,
-                    "room-player-ready-change",
-                    { id, ready },
-                    [player.id],
-                )
+                broadcast(room.players, "room-player-ready-change", {
+                    id,
+                    ready,
+                })
             }
         }
 
@@ -387,9 +394,7 @@ class Lobby {
         if (player.host) {
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
-                broadcast(room.players, "room-start-game", { id: room.id }, [
-                    player.id,
-                ])
+                broadcast(room.players, "room-start-game", { id: room.id })
             }
         }
     }

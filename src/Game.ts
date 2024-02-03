@@ -1,6 +1,6 @@
 import { setTimeout } from "node:timers/promises"
 import { randomUUID } from "node:crypto"
-import { PeerMessage } from "./PeerConnection.js"
+import { PeerConnection, PeerMessage } from "./PeerConnection.js"
 import { Player } from "./Player.js"
 import { throwError } from "./signalingserver/utils.js"
 import { GameOptions } from "./signalingserver/types.js"
@@ -16,51 +16,84 @@ export enum GameState {
     Finished,
 }
 
+enum GamePlayerState {
+    Initializing,
+    WorldBuilding,
+    Ready,
+}
+
+class GamePlayer {
+    id: string
+    name: string
+    state: GamePlayerState
+    local: boolean
+    host: boolean
+    peerConnection?: PeerConnection
+
+    constructor(
+        id: string,
+        name: string,
+        host: boolean,
+        local: boolean,
+        peerConnection?: PeerConnection,
+    ) {
+        this.id = id
+        this.name = name
+        this.state = GamePlayerState.Initializing
+        this.local = local
+        this.host = host
+        this.peerConnection = peerConnection
+    }
+}
+
 export abstract class Game {
     id: string
     state: GameState
     name: string
     options: GameOptions
-    // Game host
-    host: Player
-    // Local player
-    localPlayer: LocalPlayer
-    // All players, including the local player and host
-    players: Player[]
+    host: boolean
+    players: GamePlayer[]
 
-    constructor(
-        host: string,
-        players: Player[],
-        name: string,
-        options: GameOptions,
-    ) {
+    peerConnection: PeerConnection
+
+    constructor(players: Player[], name: string, options: GameOptions) {
         this.id = randomUUID()
         this.state = GameState.Setup
         this.name = name
         this.options = options
-        this.host =
-            players.find((player) => player.id === host) ??
-            throwError("Failed to find host for game")
 
-        this.localPlayer = (players.find(
-            (player) => player instanceof LocalPlayer,
-        ) ?? throwError("Failed to find local player")) as LocalPlayer
+        // Take the peer connection from the LocalPlayer
+        this.peerConnection = (
+            (players.find((player) => player instanceof LocalPlayer) ??
+                throwError("Failed to find local player")) as LocalPlayer
+        ).peerConnection
 
-        // this.localPlayer.peerConnection.subscribe((data) =>
-        //     this.handlePeerMessage(player, data),
-        // )
+        // Convert Lobby Players to Game Players
+        this.players = players.map((player) => {
+            const isLocal = player instanceof LocalPlayer
+            return new GamePlayer(player.id, player.name, player.host, isLocal)
+        })
 
-        this.players = [...players]
+        // Identify if _this_ is the host player
+        this.host = !!this.players.find((player) => player.host && player.local)
+
+        // Subscript to the data channel
+        this.peerConnection.subscribe((data) => this.handlePeerMessage(data))
     }
 
-    async waitForReady(timeout = 30000) {
-        let duration = 0
-        while (duration < timeout || this.state !== GameState.Ready) {
-            await setTimeout(500)
+    setup() {
+        if (this.state === GameState.Setup) {
+            if (this.host) {
+                // Host
+                console.log("Host is setting up the game...")
+            } else {
+                // Local player
+                console.log("Client is waiting for game data...")
+            }
         }
-
-        return this.state === GameState.Ready
     }
+
+    abstract play(): void
 
     /**
      * Handle the input of any player, updating the game state accordingly
@@ -72,17 +105,12 @@ export abstract class Game {
 
     protected abstract handleGameUpdate(update: object): void
 
-    private handlePeerMessage(player: Player, message: PeerMessage) {
+    private handlePeerMessage(message: PeerMessage) {
         if ("name" in message) {
             const name = message.name as string // FIXME
             if (name === "player-ready") {
                 // TODO
             } else if (name === "player-input") {
-                console.assert(
-                    player.id === message.player,
-                    "Missing or invalid player ID in message",
-                )
-
                 console.assert(
                     this.host === this.localPlayer,
                     "Handling player input in the wrong place",
@@ -111,7 +139,7 @@ export abstract class Game {
         if (player.id === this.host.id) {
             this.actionPlayerInput(player, input)
         } else {
-            this.localPlayer.peerConnection.send(
+            this.peerConnection.send(
                 JSON.stringify({
                     name: "player-input",
                     player: player.id,
@@ -126,7 +154,7 @@ export abstract class Game {
             this.players.forEach((player) => {
                 // Don't send the update to the host
                 if (player.id !== this.host.id) {
-                    player.peerConnection.send(
+                    this.peerConnection.send(
                         JSON.stringify({
                             name: "game-update",
                             data: update,

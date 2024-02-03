@@ -112,19 +112,19 @@ export interface ServerMessages {
     }
     "lobby-player-connected": {
         name: "lobby-player-connected"
-        data: { id: string; name: string }
+        data: Pick<PlayerRecord, "id" | "name">
     }
     "lobby-player-disconnected": {
         name: "lobby-player-disconnected"
-        data: { id: string }
+        data: Pick<PlayerRecord, "id">
     }
-    "lobby-game-created": {
-        name: "lobby-game-created"
-        data: { id: string }
+    "lobby-room-created": {
+        name: "lobby-room-created"
+        data: RoomRecord
     }
-    "lobby-game-deleted": {
-        name: "lobby-game-deleted"
-        data: { id: string }
+    "lobby-room-deleted": {
+        name: "lobby-room-deleted"
+        data: Pick<RoomRecord, "id">
     }
     "room-player-connected": {
         name: "room-player-connected"
@@ -132,15 +132,19 @@ export interface ServerMessages {
     }
     "room-player-disconnected": {
         name: "room-player-disconnected"
-        data: { id: string }
+        data: Pick<PlayerRecord, "id">
     }
     "room-player-ready-change": {
         name: "room-player-ready-change"
-        data: { id: string; ready: boolean }
+        data: Pick<PlayerRecord, "id" | "ready">
     }
     "room-start-game": {
         name: "room-start-game"
-        data: { id: string }
+        data: Pick<RoomRecord, "id">
+    }
+    "room-closed": {
+        name: "room-closed"
+        data: Pick<RoomRecord, "id">
     }
 }
 
