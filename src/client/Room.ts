@@ -68,7 +68,10 @@ export class Room {
     }
 
     startGame() {
-        // TODO?
+        if (this.host) {
+            this.ws.send("player-start-game", { id: this.id })
+            this.state = RoomState.Complete
+        }
     }
 
     private handlePlayerConnected: ServerMessageHandler["room-player-connected"] =
@@ -109,5 +112,7 @@ export class Room {
             }
         }
 
-    private handleStartGame: ServerMessageHandler["room-start-game"] = () => {}
+    private handleStartGame: ServerMessageHandler["room-start-game"] = () => {
+        this.state = RoomState.Complete
+    }
 }

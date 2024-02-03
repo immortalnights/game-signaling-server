@@ -8,15 +8,16 @@ import {
     ServerMessageHandler,
     ServerReplyData,
 } from "../signalingserver/message.js"
-import { RTCSessionDescription } from "werift"
 import { Room } from "./Room.js"
 import { LocalPlayer } from "../LocalPlayer.js"
+import { throwError } from "../signalingserver/utils.js"
 
 type LobbyMessageTypes =
     | "server-error"
     | "lobby-player-connected"
     | "lobby-player-disconnected"
     | "lobby-game-created"
+    | "lobby-game-deleted"
 
 export class Lobby {
     // local player's websocket connection
@@ -30,8 +31,13 @@ export class Lobby {
             "server-error": this.handleServerErrorLobby,
             "lobby-player-connected": this.handlePlayerConnected,
             "lobby-player-disconnected": this.handlePlayerDisconnected,
-            "lobby-game-created": this.handleGameCreated,
+            "lobby-game-created": this.handleGameRoomCreated,
+            "lobby-game-deleted": this.handleGameRoomDeleted,
         } satisfies Pick<ServerMessageHandler, LobbyMessageTypes>)
+    }
+
+    get connected() {
+        return this.player
     }
 
     private handleServerErrorLobby: ServerMessageHandler["server-error"] = (
@@ -50,11 +56,15 @@ export class Lobby {
             console.log("Player disconnected", data)
         }
 
-    private handleGameCreated: ServerMessageHandler["lobby-game-created"] = (
-        data,
-    ) => {
-        console.log("Game created", data)
-    }
+    private handleGameRoomCreated: ServerMessageHandler["lobby-game-created"] =
+        (data) => {
+            console.log("Game room created", data)
+        }
+
+    private handleGameRoomDeleted: ServerMessageHandler["lobby-game-deleted"] =
+        (data) => {
+            console.log("Game room deleted", data)
+        }
 
     async connect(
         player: LocalPlayer,
@@ -95,6 +105,8 @@ export class Lobby {
             "player-host-game-reply",
         )) as unknown as RoomRecord
 
+        // console.assert()
+
         this.room = new Room(this.ws!, data, this.player, true)
     }
 
@@ -103,6 +115,10 @@ export class Lobby {
      * @returns
      */
     async list(): Promise<RoomRecord[]> {
+        if (!this.player) {
+            throw new Error("Lobby missing local player")
+        }
+
         this.ws?.send("player-list-games")
 
         type ReplyMessageData = ServerReplyData<"player-list-games-reply">
@@ -119,15 +135,24 @@ export class Lobby {
      * @param game
      * @returns
      */
-    async join(
-        game: RoomRecord,
-        sessionDescription: RTCSessionDescription,
-    ): Promise<void> {
+    async join(room: RoomRecord): Promise<void> {
         if (!this.player) {
             throw new Error("Lobby missing local player")
         }
 
-        this.ws?.send("player-join-game", { id: game.id, sessionDescription })
+        const host =
+            room.players.find((player) => player.host) ??
+            throwError("Failed to find host")
+
+        if (!host.sessionDescription) {
+            throw Error("Room host does not have peer connection")
+        }
+
+        const answer = await this.player.peerConnection.answer(
+            host.sessionDescription,
+        )
+
+        this.ws?.send("player-join-game", { id: room.id, answer })
 
         type ReplyMessageData = ServerReplyData<"player-join-game-reply">
 

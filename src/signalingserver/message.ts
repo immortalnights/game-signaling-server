@@ -122,6 +122,10 @@ export interface ServerMessages {
         name: "lobby-game-created"
         data: { id: string }
     }
+    "lobby-game-deleted": {
+        name: "lobby-game-deleted"
+        data: { id: string }
+    }
     "room-player-connected": {
         name: "room-player-connected"
         data: PlayerRecord

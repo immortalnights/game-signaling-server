@@ -50,7 +50,7 @@ class Room implements RoomRecord {
         this.name = name
         this.state = RoomState.Open
         this.options = options
-        this.players = [{ ...host, room: this.id, host: true }]
+        this.players = [host]
     }
 
     get host(): ServerPlayer {
@@ -70,6 +70,29 @@ class Room implements RoomRecord {
             this.serializePlayer(player),
             [player.id],
         )
+    }
+
+    leave(player: ServerPlayer) {
+        player.room = undefined
+
+        const index = this.players.indexOf(player)
+        if (index !== -1) {
+            this.players.splice(index, 1)
+            console.log(`Player '${player.name}' has left room '${this.name}'`)
+
+            broadcast(this.players, "room-player-disconnected", {
+                id: player.id,
+            })
+
+            if (this.players.length === 0) {
+                console.debug(`Closing empty room '${this.name}'`)
+                this.state = RoomState.Closed
+            }
+        } else {
+            console.error(
+                `Failed to find player '${player.name}' in room '${this.name}'`,
+            )
+        }
     }
 
     private serializePlayer(player: ServerPlayer): PlayerRecord {
@@ -156,12 +179,47 @@ class Lobby {
         const index = this.players.findIndex((player) => player.ws === ws)
         if (index !== -1) {
             const player = this.players[index]
-
             this.players.splice(index, 1)
 
-            broadcast(this.players, "lobby-player-disconnected", {
-                id: player.id,
-            })
+            if (player.room) {
+                const roomIndex = this.rooms.findIndex(
+                    (room) => room.id === player.room,
+                )
+
+                if (roomIndex !== -1) {
+                    const room = this.rooms[roomIndex]
+                    console.debug(
+                        `Player '${player.name}' is in room '${room.name}'`,
+                    )
+
+                    room.leave(player)
+
+                    if (room.state === RoomState.Closed) {
+                        broadcast(this.players, "lobby-game-deleted", {
+                            id: room.id,
+                        })
+
+                        this.players.forEach((lobbyPlayer) => {
+                            if (lobbyPlayer.room === room.id) {
+                                lobbyPlayer.room = undefined
+                            }
+                        })
+
+                        this.rooms.splice(roomIndex, 1)
+                    } else {
+                        broadcast(this.players, "lobby-player-disconnected", {
+                            id: player.id,
+                        })
+                    }
+                }
+            } else {
+                console.debug(`Player '${player.name}' was not in a room'`)
+                broadcast(this.players, "lobby-player-disconnected", {
+                    id: player.id,
+                })
+            }
+        } else {
+            console.error("Failed to find ServerPlayer for disconnected player")
         }
     }
 
@@ -228,6 +286,10 @@ class Lobby {
             { maxPlayers: 2, minPlayers: 2, ...options },
             player,
         )
+
+        // Update the player details
+        player.room = room.id
+        player.host = true
 
         this.rooms.push(room)
 
@@ -301,12 +363,36 @@ class Lobby {
 
     private handlePlayerChangeReadyState: ClientMessageHandler["player-change-ready-state"] =
         (player, { id, ready }) => {
+            console.assert(player.id === id, "Mismatch player ID")
+            console.assert(player.room, "Player is not a member of a room")
             player.ready = ready
+
+            const room = this.rooms.find((room) => room.id === player.room)
+            if (room) {
+                broadcast(
+                    room.players,
+                    "room-player-ready-change",
+                    { id, ready },
+                    [player.id],
+                )
+            }
         }
 
     private handlePlayerStartGame: ClientMessageHandler["player-start-game"] = (
         player,
-    ) => {}
+    ) => {
+        console.assert(player.host, "None host attempted to start game")
+        console.assert(player.room, "Player is not a member of a room")
+
+        if (player.host) {
+            const room = this.rooms.find((room) => room.id === player.room)
+            if (room) {
+                broadcast(room.players, "room-start-game", { id: room.id }, [
+                    player.id,
+                ])
+            }
+        }
+    }
 }
 
 const lobby = new Lobby()
