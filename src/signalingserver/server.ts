@@ -21,16 +21,20 @@ export type ClientMessageHandler = {
 const broadcast = <T extends keyof ServerMessages>(
     players: ServerPlayer[],
     name: ServerMessages[T]["name"],
-    data: ServerMessages[T]["data"],
+    data:
+        | ServerMessages[T]["data"]
+        | ((target: ServerPlayer) => ServerMessages[T]["data"]),
     exclude: string[] = [],
 ) => {
     players.forEach((player) => {
         if (!exclude.includes(player.id)) {
             console.debug(`Broadcast ${name} to ${player.id}`)
+
+            const preparedData = data instanceof Function ? data(player) : data
             player.ws.send(
                 JSON.stringify({
                     name,
-                    data,
+                    data: preparedData,
                 }),
             )
         }
@@ -67,10 +71,21 @@ class Room implements RoomRecord {
         player.room = this.id
         this.players.push(player)
 
+        console.assert(
+            sessionDescription,
+            `Player ${player.id} did not provide sessionDescription when joining room`,
+        )
+
         broadcast(
             this.players,
             "room-player-connected",
-            this.serializePlayer(player),
+            (target) =>
+                this.serializePlayer({
+                    ...player,
+                    sessionDescription: target.host
+                        ? sessionDescription
+                        : undefined,
+                }),
             [player.id],
         )
     }
@@ -98,9 +113,7 @@ class Room implements RoomRecord {
             name: player.name,
             ready: player.ready,
             host: player.host,
-            sessionDescription: player.host
-                ? player.sessionDescription
-                : undefined,
+            sessionDescription: player.sessionDescription,
         }
     }
 
@@ -238,7 +251,7 @@ class Lobby {
             player = {
                 ws,
                 id: ws.getUserData().id,
-                name: "noname",
+                name: "-unnamed-",
                 host: false,
                 ready: false,
                 sessionDescription: undefined,
@@ -268,6 +281,8 @@ class Lobby {
         { name },
     ) => {
         type Reply = ClientMessages["player-join-lobby"]["reply"]
+
+        player.name = name
 
         this.join(player)
         return {
@@ -394,8 +409,13 @@ class Lobby {
         if (player.host) {
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
+                room.state = RoomState.Locked
                 broadcast(room.players, "room-start-game", { id: room.id })
+            } else {
+                console.error(`Player ${player.id} is in a room`)
             }
+        } else {
+            console.error(`Player ${player.id} is not the game host`)
         }
     }
 }

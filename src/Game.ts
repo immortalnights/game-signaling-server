@@ -1,12 +1,10 @@
-import { setTimeout } from "node:timers/promises"
 import { randomUUID } from "node:crypto"
 import { PeerConnection, PeerMessage } from "./PeerConnection.js"
 import { Player } from "./Player.js"
 import { throwError } from "./signalingserver/utils.js"
 import { GameOptions } from "./signalingserver/types.js"
 import { LocalPlayer } from "./LocalPlayer.js"
-import { RemotePlayer } from "./RemotePlayer.js"
-import { AI } from "./AI.js"
+import { waitFor } from "./utilities.js"
 
 export enum GameState {
     Setup,
@@ -16,13 +14,15 @@ export enum GameState {
     Finished,
 }
 
-enum GamePlayerState {
+export enum GamePlayerState {
+    Joining,
     Initializing,
     WorldBuilding,
     Ready,
+    Paused,
 }
 
-class GamePlayer {
+export class GamePlayer {
     id: string
     name: string
     state: GamePlayerState
@@ -39,7 +39,7 @@ class GamePlayer {
     ) {
         this.id = id
         this.name = name
-        this.state = GamePlayerState.Initializing
+        this.state = GamePlayerState.Joining
         this.local = local
         this.host = host
         this.peerConnection = peerConnection
@@ -51,6 +51,7 @@ export abstract class Game {
     state: GameState
     name: string
     options: GameOptions
+    localPlayer: GamePlayer
     host: boolean
     players: GamePlayer[]
 
@@ -62,6 +63,8 @@ export abstract class Game {
         this.name = name
         this.options = options
 
+        console.debug(players)
+
         // Take the peer connection from the LocalPlayer
         this.peerConnection = (
             (players.find((player) => player instanceof LocalPlayer) ??
@@ -71,8 +74,12 @@ export abstract class Game {
         // Convert Lobby Players to Game Players
         this.players = players.map((player) => {
             const isLocal = player instanceof LocalPlayer
-            return new GamePlayer(player.id, player.name, player.host, isLocal)
+            return new GamePlayer(player.id!, player.name, player.host, isLocal)
         })
+
+        this.localPlayer =
+            this.players.find((player) => player.local) ??
+            throwError("Failed to find local player")
 
         // Identify if _this_ is the host player
         this.host = !!this.players.find((player) => player.host && player.local)
@@ -81,14 +88,55 @@ export abstract class Game {
         this.peerConnection.subscribe((data) => this.handlePeerMessage(data))
     }
 
-    setup() {
+    async setup() {
         if (this.state === GameState.Setup) {
             if (this.host) {
                 // Host
+                this.setPlayerState(
+                    this.localPlayer,
+                    GamePlayerState.Initializing,
+                )
+
+                console.log("Waiting for players to join...")
+                await waitFor(() =>
+                    this.players.every(
+                        (player) =>
+                            player.state === GamePlayerState.Initializing,
+                    ),
+                )
+
                 console.log("Host is setting up the game...")
+                const data = this.serialize()
+                this.peerConnection.send({
+                    name: "game-update",
+                    data,
+                })
+
+                this.setPlayerState(this.localPlayer, GamePlayerState.Ready)
+
+                console.log("Waiting for players to become ready...")
+                await waitFor(() =>
+                    this.players.every(
+                        (player) => player.state === GamePlayerState.Ready,
+                    ),
+                )
+
+                console.log("Game is not playing...")
+                this.setGameState(GameState.Playing)
+
+                console.log("Host setup is complete")
             } else {
                 // Local player
                 console.log("Client is waiting for game data...")
+                this.setPlayerState(
+                    this.localPlayer,
+                    GamePlayerState.Initializing,
+                )
+
+                console.log("Client is waiting for game play state...")
+                await waitFor(() => this.state === GameState.Playing)
+
+                console.log("Client setup is complete")
             }
         }
     }
@@ -101,31 +149,60 @@ export abstract class Game {
      * @param player
      * @param input
      */
-    protected abstract actionPlayerInput(player: Player, input: object): void
+    protected abstract actionPlayerInput(
+        player: GamePlayer,
+        input: object,
+    ): void
+
+    protected abstract handleInitialGameDate(data: object): void
 
     protected abstract handleGameUpdate(update: object): void
 
+    protected abstract serialize(): object
+
     private handlePeerMessage(message: PeerMessage) {
+        console.log("Received peer message", message)
         if ("name" in message) {
             const name = message.name as string // FIXME
-            if (name === "player-ready") {
-                // TODO
-            } else if (name === "player-input") {
-                console.assert(
-                    this.host === this.localPlayer,
-                    "Handling player input in the wrong place",
+            if (this.host) {
+                const player = this.players.find(
+                    (player) => player.id === message.data.player,
                 )
 
-                this.actionPlayerInput(player, message.data ?? {})
-            } else if (name === "player-chat") {
-                this.handlePlayerChat(player, message.data ?? {})
-            } else if (name === "game-update") {
-                this.handleGameUpdate(message.data ?? {})
+                if (player) {
+                    if (name === "player-state-update") {
+                        this.setPlayerState(player, message.data.state)
+                    } else if (name === "player-chat") {
+                        this.handlePlayerChat(player, message.data ?? {})
+                    } else if (name === "player-input") {
+                        this.actionPlayerInput(player, message.data ?? {})
+                    }
+                } else {
+                    console.error(
+                        `Failed to find player ${message.data.player}`,
+                    )
+                }
+            } else {
+                if (name === "game-state-update") {
+                    this.state = message.data.state
+                } else if (name === "game-update") {
+                    if (this.state === GameState.Setup) {
+                        this.handleInitialGameDate(message.data ?? {})
+                        this.setPlayerState(
+                            this.localPlayer,
+                            GamePlayerState.Ready,
+                        )
+                    } else {
+                        this.handleGameUpdate(message.data ?? {})
+                    }
+                }
             }
+        } else {
+            console.error(`Message is missing message 'name'`)
         }
     }
 
-    handlePlayerChat(player: Player, data: object) {
+    handlePlayerChat(player: GamePlayer, data: object) {
         // TODO
     }
 
@@ -135,32 +212,54 @@ export abstract class Game {
      *
      * @param input
      */
-    handlePlayerInput(player: Player, input: object) {
-        if (player.id === this.host.id) {
-            this.actionPlayerInput(player, input)
+    handlePlayerInput(input: object) {
+        if (this.host) {
+            this.actionPlayerInput(this.localPlayer, input)
         } else {
-            this.peerConnection.send(
-                JSON.stringify({
-                    name: "player-input",
-                    player: player.id,
-                    data: input,
-                }),
-            )
+            console.debug("Sending player input")
+            this.peerConnection.send({
+                name: "player-input",
+                data: { player: this.localPlayer.id, ...input },
+            })
         }
     }
 
-    sendGameUpdate(update: object) {
+    setGameState(state: GameState) {
         if (this.host) {
-            this.players.forEach((player) => {
-                // Don't send the update to the host
-                if (player.id !== this.host.id) {
-                    this.peerConnection.send(
-                        JSON.stringify({
-                            name: "game-update",
-                            data: update,
-                        }),
-                    )
-                }
+            this.state = state
+            this.peerConnection.send({
+                name: "game-state-update",
+                data: { state: this.state },
+            })
+        } else {
+            this.state = GameState.Playing
+        }
+        console.debug(`Game is now ${this.state}`)
+    }
+
+    setPlayerState(player: GamePlayer, state: GamePlayerState) {
+        if (this.host) {
+            player.state = state
+            console.debug(`Player ${player.name} is now ${player.state}`)
+        } else {
+            this.peerConnection.send({
+                name: "player-state-update",
+                data: {
+                    player: player.id,
+                    state,
+                },
+            })
+        }
+    }
+
+    sendGameUpdate() {
+        if (this.host) {
+            const data = this.serialize()
+            // Don't send the update to the host
+            console.debug("Sending game update...")
+            this.peerConnection.send({
+                name: "game-update",
+                data,
             })
         }
     }

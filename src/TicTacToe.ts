@@ -1,17 +1,26 @@
-import { Game, GameState } from "./Game.js"
+import { Game, GamePlayer, GamePlayerState, GameState } from "./Game.js"
 import { LocalPlayer } from "./LocalPlayer.js"
 import { PeerConnection } from "./PeerConnection.js"
 import { Player } from "./Player.js"
+import { takeTurn } from "./cli.js"
 import { GameOptions } from "./signalingserver/types.js"
+import { throwError } from "./signalingserver/utils.js"
+import { setTimeout } from "node:timers/promises"
+import { waitFor } from "./utilities.js"
+
+type Tokens = "O" | "X"
 
 export class TicTakToe extends Game {
-    token: "O" | "X"
-    spaces: (string | undefined)[]
+    token: Tokens
+    turn: Tokens
+    spaces: (Tokens | undefined)[]
+    winner: Tokens | undefined
     lastPlayer: string | undefined
 
     constructor(players: Player[], name: string, options: GameOptions) {
         super(players, name, options)
-        this.token = true ? "O" : "X"
+        this.token = this.localPlayer.host ? "O" : "X"
+        this.turn = "O"
         this.spaces = new Array(9).fill(undefined)
     }
 
@@ -22,6 +31,7 @@ export class TicTakToe extends Game {
             return s[index] || " "
         }
 
+        console.clear()
         console.log(` ${v(0)} | ${v(1)} | ${v(2)} `)
         console.log(`---+---+---`)
         console.log(` ${v(3)} | ${v(4)} | ${v(5)} `)
@@ -35,42 +45,79 @@ export class TicTakToe extends Game {
             .filter((value) => value !== undefined) as number[]
     }
 
-    get getState() {
-        return {
-            state: this.state,
-            spaces: this.spaces,
-            turn: 0, // TODO turn counter
-            currentPlayer: undefined,
+    async play() {
+        while (!this.finished() && this.state === GameState.Playing) {
+            if (this.token === this.turn) {
+                this.render()
+                const move = await takeTurn(this.availableMoves)
+                this.handlePlayerInput({ token: this.token, move })
+                await setTimeout(250)
+            } else {
+                this.render()
+                console.log("Waiting for opponent...")
+                // Wait for own turn, timeout two minutes
+                await waitFor(() => this.turn === this.token, 2 * 60 * 1000)
+                await setTimeout(250)
+            }
         }
     }
-
-    async play() {}
 
     finished() {
         return !!this.calculateWinner() || this.availableMoves.length === 0
     }
 
-    protected actionPlayerInput(player: Player, input: object): void {
+    protected serialize() {
+        return {
+            state: this.state,
+            spaces: this.spaces,
+            turn: this.turn,
+            winner: this.winner,
+            currentPlayer: undefined,
+        }
+    }
+
+    protected actionPlayerInput(player: GamePlayer, input: object): void {
         if (this.host) {
+            console.log(`Apply turn for ${player.id}`)
             // Apply the turn
+            const token = this.turn
+
+            // TODO validate the player turn, token, etc
+            // TODO use player ID as turn, not the token...
 
             // player.id === this.host.id ? "O" : "X"
-            this.takePlayerTurn(this.token, input.position)
+            this.takePlayerTurn(token, input.move)
 
-            const winner = this.calculateWinner()
-            if (winner) {
+            // Flip the turn
+            this.turn = token === "O" ? "X" : "O"
+
+            this.winner = this.calculateWinner()
+            if (this.winner) {
                 this.state = GameState.Finished
+            } else {
             }
 
             // Send the update
-            this.sendGameUpdate({ ...this.getState, winner })
+            this.sendGameUpdate()
         } else {
             console.error("None host attempted to action player input")
         }
     }
 
+    protected handleInitialGameDate(data: object) {
+        if (!this.host) {
+            // Set the local state
+        } else {
+            console.error("Host received initial game update")
+        }
+    }
+
     protected handleGameUpdate(update: object): void {
         if (!this.host) {
+            this.state = update.state
+            this.spaces = update.spaces
+            this.turn = update.turn
+            this.winner = update.winner
         } else {
             console.error("Host received game update")
         }
@@ -82,7 +129,7 @@ export class TicTakToe extends Game {
         })
     }
 
-    takePlayerTurn(token: string, position: number) {
+    takePlayerTurn(token: Tokens, position: number) {
         if (token !== "O" && token !== "X") {
             throw Error("Invalid player")
         }
@@ -99,10 +146,9 @@ export class TicTakToe extends Game {
             throw Error("Invalid position, space take")
         }
 
+        console.debug(`Placing token ${token} at position ${position}`)
         this.spaces[position] = token
         this.lastPlayer = token
-
-        this.sendGameUpdate()
     }
 
     calculateWinner() {

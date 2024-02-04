@@ -23,8 +23,16 @@ export class PeerConnection {
         )
 
         this.pc.onDataChannel.subscribe((channel) => {
+            console.log("pc.onDataChannel")
             this.subscribeToDataChannel(channel)
         })
+    }
+
+    get connected() {
+        return (
+            this.pc.iceConnectionState === "connected" &&
+            this.dc?.readyState === "open"
+        )
     }
 
     subscribe(onMessage: PeerConnectionMessageCallback) {
@@ -56,8 +64,8 @@ export class PeerConnection {
         return answer
     }
 
-    send(data: string | Buffer) {
-        this.dc?.send(data)
+    send(data: object | string | Buffer) {
+        this.dc?.send(data instanceof Object ? JSON.stringify(data) : data)
     }
 
     close() {

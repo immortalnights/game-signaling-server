@@ -68,18 +68,17 @@ export class Lobby {
         console.log("Game room deleted", data)
     }
 
-    async connect(
-        player: LocalPlayer,
-        timeout: number = 30000,
-    ): Promise<PlayerRecord | undefined> {
+    async connect(player: LocalPlayer, timeout: number = 30000): Promise<void> {
         this.player = player
 
         await this.ws?.connect(timeout)
         this.ws?.send("player-join-lobby", { name: player.name })
-        return await this.ws?.waitForMessage<PlayerRecord>(
+        const resp = await this.ws?.waitForMessage<PlayerRecord>(
             "player-join-lobby-reply",
             5000,
         )
+
+        this.player.id = resp?.id
     }
 
     disconnect() {
@@ -107,9 +106,9 @@ export class Lobby {
             "player-host-game-reply",
         )) as unknown as RoomRecord
 
-        // console.assert()
+        this.player.host = true
 
-        this.room = new Room(this.ws!, data, this.player, true)
+        this.room = new Room(this.ws!, data, this.player)
         return this.room
     }
 
@@ -155,7 +154,10 @@ export class Lobby {
             host.sessionDescription,
         )
 
-        this.ws?.send("player-join-game", { id: room.id, answer })
+        this.ws?.send("player-join-game", {
+            id: room.id,
+            sessionDescription: answer,
+        })
 
         type ReplyMessageData = ServerReplyData<"player-join-game-reply">
 
@@ -163,7 +165,7 @@ export class Lobby {
             "player-join-game-reply",
         )) as unknown as RoomRecord
 
-        this.room = new Room(this.ws!, data, this.player, false)
+        this.room = new Room(this.ws!, data, this.player)
         return this.room
     }
 

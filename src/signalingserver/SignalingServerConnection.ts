@@ -122,7 +122,7 @@ export class SignalingServerConnection {
     }
 
     private handleMessageOLD(data: RawData, isBinary: boolean): any {
-        console.log("WebSocket message", data.toString().length, isBinary)
+        // console.debug("WebSocket message", data.toString().length, isBinary)
 
         let json
         try {
@@ -135,7 +135,7 @@ export class SignalingServerConnection {
     private handleMessage(data: RawData, isBinary: boolean): any {
         const message = JSON.parse(data.toString())
         if ("name" in message) {
-            console.debug("Received", message.name)
+            console.debug("WS Received", message.name)
 
             const name = message.name as keyof ServerMessageHandler
             if (this.subscriptions[name]) {

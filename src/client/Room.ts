@@ -33,22 +33,26 @@ export class Room {
         ws: SignalingServerConnection,
         roomData: RoomRecord,
         player: LocalPlayer,
-        host: boolean,
     ) {
         this.ws = ws
         this.player = player
         this.id = roomData.id
         this.name = roomData.name
         this.state = roomData.state
-        this.host = host
+        this.host = player.host
         this.players = [player]
         this.options = roomData.options
 
-        if (!host) {
-            roomData.players.forEach((player) => {
-                const remotePlayer = new RemotePlayer(player.id, player.name)
-                remotePlayer.ready = player.ready
-                this.players.push(remotePlayer)
+        if (!player.host) {
+            roomData.players.forEach((roomPlayer) => {
+                if (roomPlayer.id !== player.id) {
+                    const remotePlayer = new RemotePlayer(
+                        roomPlayer.id,
+                        roomPlayer.name,
+                    )
+                    remotePlayer.ready = roomPlayer.ready
+                    this.players.push(remotePlayer)
+                }
             })
         }
 
@@ -62,11 +66,10 @@ export class Room {
     }
 
     setReadyState(ready: boolean) {
-        const self = this.players.find((player) => player.id === this.player.id)
-        if (self) {
-            self.ready = true
-        }
-        this.ws.send("player-change-ready-state", { id: this.player.id, ready })
+        this.ws.send("player-change-ready-state", {
+            id: this.player.id!,
+            ready,
+        })
     }
 
     startGame() {
@@ -122,10 +125,11 @@ export class Room {
 
     private handleStartGame: ServerMessageHandler["room-start-game"] = () => {
         this.state = RoomState.Complete
+        console.log("Room state changed to Complete")
     }
 
     private handlerRoomClosed: ServerMessageHandler["room-closed"] = () => {
-        console.log("Start game?")
         this.state = RoomState.Closed
+        console.log("Room state changed to Closed")
     }
 }
