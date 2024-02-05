@@ -1,14 +1,16 @@
 import select, { Separator } from "@inquirer/select"
 import input from "@inquirer/input"
-import { setTimeout } from "node:timers/promises"
-import {
-    mainMenuChoices,
-    multiplayerMenuChoices,
-    type MainMenuChoices,
-    MultiplayerMenuChoices,
-} from "./types.js"
-import { RoomRecord } from "./signalingserver/types.js"
-import { throwError } from "./signalingserver/utils.js"
+import { RoomRecord, throwError } from "../signalingserver/index.js"
+
+export const mainMenuChoices = ["single-player", "multiplayer", "quit"] as const
+export type MainMenuChoices = (typeof mainMenuChoices)[number]
+
+export const multiplayerMenuChoices = [
+    "host-game",
+    "join-game",
+    "cancel",
+] as const
+export type MultiplayerMenuChoices = (typeof multiplayerMenuChoices)[number]
 
 export const mainMenu = async (): Promise<MainMenuChoices> => {
     const choice = await select({

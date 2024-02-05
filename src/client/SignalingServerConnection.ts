@@ -2,9 +2,8 @@ import { WebSocket, RawData } from "ws"
 import {
     ClientMessages,
     ServerMessageHandler,
-    ServerMessages,
     ServerReplyMessages,
-} from "./message.js"
+} from "../signalingserver/index.js"
 
 export class SignalingServerConnection {
     private ws?: WebSocket

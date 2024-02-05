@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { PeerConnection, PeerMessage } from "./PeerConnection.js"
 import { Player } from "./Player.js"
-import { throwError } from "./signalingserver/utils.js"
-import { GameOptions } from "./signalingserver/types.js"
+import { GameOptions, throwError } from "../signalingserver/index.js"
 import { LocalPlayer } from "./LocalPlayer.js"
 import { waitFor } from "./utilities.js"
 

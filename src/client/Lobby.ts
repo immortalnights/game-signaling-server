@@ -2,15 +2,13 @@ import {
     PlayerRecord,
     RoomRecord,
     GameOptions,
-    SignalingServerConnection,
-} from "../signalingserver/index.js"
-import {
     ServerMessageHandler,
     ServerReplyData,
-} from "../signalingserver/message.js"
+    throwError,
+} from "../signalingserver/index.js"
 import { Room } from "./Room.js"
-import { LocalPlayer } from "../LocalPlayer.js"
-import { throwError } from "../signalingserver/utils.js"
+import { LocalPlayer } from "./LocalPlayer.js"
+import { SignalingServerConnection } from "./SignalingServerConnection.js"
 
 type LobbyMessageTypes =
     | "server-error"

@@ -1,14 +1,13 @@
 import {
     GameOptions,
     RoomRecord,
-    PlayerRecord,
     RoomState,
-} from "../signalingserver/types.js"
-import { SignalingServerConnection } from "../signalingserver/SignalingServerConnection.js"
-import { ServerMessageHandler } from "../signalingserver/message.js"
-import { LocalPlayer } from "../LocalPlayer.js"
-import { Player } from "../Player.js"
-import { RemotePlayer } from "../RemotePlayer.js"
+    ServerMessageHandler,
+} from "../signalingserver/index.js"
+import { SignalingServerConnection } from "./SignalingServerConnection.js"
+import { LocalPlayer } from "./LocalPlayer.js"
+import { Player } from "./Player.js"
+import { RemotePlayer } from "./RemotePlayer.js"
 
 type RoomMessageType =
     | "room-player-connected"

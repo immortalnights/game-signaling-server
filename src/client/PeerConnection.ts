@@ -9,6 +9,7 @@ export interface PeerMessage {
     player?: string
     data?: object
 }
+
 export type PeerConnectionMessageCallback = (data: PeerMessage) => void
 
 export class PeerConnection {

@@ -1,23 +1,15 @@
 import { setTimeout } from "node:timers/promises"
-import { randomUUID } from "node:crypto"
+import { program } from "commander"
 import { TicTakToe } from "./TicTacToe.js"
 import {
     joinGameMenu,
     mainMenu,
     multiplayerMenu,
     multiplayerServerAddress,
-    takeTurn,
 } from "./cli.js"
-import { PeerConnection } from "./PeerConnection.js"
-import { Game, GameState } from "./Game.js"
-import { Player } from "./Player.js"
-import { RemotePlayer } from "./RemotePlayer.js"
 import { AI } from "./AI.js"
-import { Lobby } from "./client/Lobby.js"
-import { LocalPlayer } from "./LocalPlayer.js"
-import { RoomState } from "./signalingserver/types.js"
-import { program } from "commander"
-import { waitFor } from "./utilities.js"
+import { Lobby, LocalPlayer, GameState, waitFor } from "../client/index.js"
+import { RoomState } from "../signalingserver/index.js"
 
 enum State {
     MainMenu,
@@ -29,9 +21,6 @@ enum State {
     LobbyRoom,
     // Game world initialization and player connection checks
     CreateGame,
-    // LocalPlayerTurn,
-    // RemotePlayerTurn,
-    // GameOver,
 }
 
 let state: State = State.MainMenu

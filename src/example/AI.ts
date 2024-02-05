@@ -1,4 +1,4 @@
-import { Player } from "./Player.js"
+import { Player } from "../client/Player.js"
 import { TicTakToe } from "./TicTacToe.js"
 
 export class AI extends Player {

@@ -1,12 +1,13 @@
-import { Game, GamePlayer, GamePlayerState, GameState } from "./Game.js"
-import { LocalPlayer } from "./LocalPlayer.js"
-import { PeerConnection } from "./PeerConnection.js"
-import { Player } from "./Player.js"
-import { takeTurn } from "./cli.js"
-import { GameOptions } from "./signalingserver/types.js"
-import { throwError } from "./signalingserver/utils.js"
 import { setTimeout } from "node:timers/promises"
-import { waitFor } from "./utilities.js"
+import {
+    Game,
+    Player,
+    GamePlayer,
+    GameState,
+    waitFor,
+} from "../client/index.js"
+import type { GameOptions } from "../signalingserver/index.js"
+import { takeTurn } from "./cli.js"
 
 type Tokens = "O" | "X"
 

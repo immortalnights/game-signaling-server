@@ -25,6 +25,7 @@ export type ServerReplyMessage<Name, Data> = {
           error: string
       }
 )
+
 export type GeneralServerReplyMessage =
     | ServerReplyMessage<keyof ServerReplyMessages, unknown>
     | undefined
@@ -103,8 +104,6 @@ export type ServerReplyData<T extends keyof ServerReplyMessages> =
         ? ServerReplyMessages[T]["data"]
         : undefined
 
-type PrettyServerReplyMessages = Prettify<ServerReplyMessages>
-
 export interface ServerMessages {
     "server-error": {
         name: "server-error"
@@ -148,10 +147,6 @@ export interface ServerMessages {
     }
 }
 
-type PrettyServerMessages = Prettify<ServerMessages>
-
 export type ServerMessageHandler = {
     [K in keyof ServerMessages]: (data: ServerMessages[K]["data"]) => void
 }
-
-type PrettyServerMessageHandler = Prettify<ServerMessageHandler>

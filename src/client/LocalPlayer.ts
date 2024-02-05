@@ -1,5 +1,5 @@
-import { PeerConnection } from "./PeerConnection.js"
 import { Player } from "./Player.js"
+import { PeerConnection } from "./PeerConnection.js"
 
 export class LocalPlayer extends Player {
     peerConnection: PeerConnection
