@@ -2,14 +2,15 @@
   "name": "internet-ttt",
   "version": "1.0.0",
   "description": "",
-  "main": "build/index.js",
+  "main": "build/signalingserver/server.js",
   "type": "module",
   "scripts": {
     "start": "concurrently --no-color npm:build:watch npm:server:dev",
-    "server": "build/signalingserver/server.js",
+    "server": "node ./build/signalingserver/server.js",
     "server:dev": "nodemon build/signalingserver/server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
+    "example": "node ./build/example/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

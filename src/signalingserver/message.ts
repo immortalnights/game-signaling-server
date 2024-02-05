@@ -1,6 +1,5 @@
 import { RTCSessionDescription } from "werift"
 import { GameOptions, RoomRecord, PlayerRecord } from "./types.js"
-import { Prettify } from "./utils.js"
 
 export interface ClientMessage {
     name: string

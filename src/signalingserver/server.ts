@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto"
 import { RTCSessionDescription } from "werift"
 import { WebSocket } from "uWebSockets.js"
-import { throwError } from "./utils.js"
-import { randomUUID } from "node:crypto"
+import { throwError } from "./utilities.js"
 import { ClientMessage, ClientMessages, ServerMessages } from "./message.js"
-import { GameOptions, RoomRecord, PlayerRecord, RoomState } from "./types.js"
+import { GameOptions, RoomRecord, PlayerRecord } from "./types.js"
 import { UserData, app } from "./app.js"
+import { RoomState } from "./Room.js"
 
 interface ServerPlayer extends PlayerRecord {
     ws: WebSocket<UserData>
