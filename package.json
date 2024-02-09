@@ -1,9 +1,11 @@
 {
-  "name": "internet-ttt",
+  "name": "game-signaling-server",
   "version": "1.0.0",
   "description": "",
+  "repository": "https://github.com/immortalnights/game-signaling-server.git",
   "main": "build/signalingserver/server.js",
   "type": "module",
+  "private": true,
   "scripts": {
     "start": "concurrently --no-color npm:build:watch npm:server:dev",
     "server": "node ./build/signalingserver/server.js",
