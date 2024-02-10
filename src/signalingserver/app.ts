@@ -1,7 +1,6 @@
 import {
     App,
     DEDICATED_COMPRESSOR_3KB,
-    WebSocket,
     WebSocketBehavior,
 } from "uWebSockets.js"
 
