@@ -1,6 +1,6 @@
 {
   "name": "game-signaling-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "repository": "https://github.com/immortalnights/game-signaling-server.git",
   "main": "build/signalingserver/server.js",
