@@ -1,13 +1,11 @@
-import {
-    GameOptions,
-    RoomRecord,
-    RoomState,
-    ServerMessageHandler,
-} from "../signalingserver/index.js"
+import { ServerMessageHandler } from "../signalingserver/message.js"
+import { GameOptions, RoomRecord } from "../signalingserver/types.js"
+import { RoomState } from "../signalingserver/Room.js"
 import { SignalingServerConnection } from "./SignalingServerConnection.js"
 import { LocalPlayer } from "./LocalPlayer.js"
 import { Player } from "./Player.js"
 import { RemotePlayer } from "./RemotePlayer.js"
+import { RTCSessionDescription } from "werift"
 
 type RoomMessageType =
     | "room-player-connected"
@@ -90,7 +88,12 @@ export class Room {
 
             if (this.host) {
                 if (sessionDescription) {
-                    this.player.peerConnection.response(sessionDescription)
+                    this.player.peerConnection.response(
+                        new RTCSessionDescription(
+                            sessionDescription.sdp,
+                            sessionDescription.type,
+                        ),
+                    )
                 } else {
                     console.error(
                         "Player connected without RTC answer, expected by host",

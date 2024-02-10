@@ -31,3 +31,5 @@ export interface GameOptions {
     minPlayers?: number
     [key: string]: unknown
 }
+
+export default { RoomState }

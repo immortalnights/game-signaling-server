@@ -3,7 +3,7 @@ import {
     ClientMessages,
     ServerMessageHandler,
     ServerReplyMessages,
-} from "../signalingserver/index.js"
+} from "../signalingserver/message.js"
 
 export class SignalingServerConnection {
     private ws?: WebSocket
