@@ -5,7 +5,7 @@ import type { ClientMessage, ClientMessages } from "./message.js"
 import { WebSocket } from "uWebSockets.js"
 import { deleteItemFromArray, throwError } from "./utilities.js"
 import { broadcast } from "./broadcast.js"
-import { RoomState } from "./types.js"
+import { RoomState } from "./states.js"
 
 type LobbyMessageTypes =
     | "player-join-lobby"

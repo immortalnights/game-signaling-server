@@ -1,11 +1,11 @@
 import { ServerMessageHandler } from "../signalingserver/message.js"
 import { GameOptions, RoomRecord } from "../signalingserver/types.js"
-import { RoomState } from "../signalingserver/Room.js"
 import { SignalingServerConnection } from "./SignalingServerConnection.js"
 import { LocalPlayer } from "./LocalPlayer.js"
 import { Player } from "./Player.js"
 import { RemotePlayer } from "./RemotePlayer.js"
 import { RTCSessionDescription } from "werift"
+import { RoomState } from "../signalingserver/states.js"
 
 type RoomMessageType =
     | "room-player-connected"

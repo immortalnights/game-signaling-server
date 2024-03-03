@@ -6,8 +6,17 @@
   "main": "build/signalingserver/server.js",
   "type": "module",
   "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./build/client/index.d.ts",
+        "default": "./build/client/index.js"
+      }
+    }
+  },
   "scripts": {
-    "start": "concurrently --no-color npm:build:watch npm:server:dev",
+    "dev": "concurrently --no-color npm:build:watch npm:server:dev",
     "server": "node ./build/signalingserver/server.js",
     "server:dev": "nodemon build/signalingserver/server.js",
     "build": "tsc",

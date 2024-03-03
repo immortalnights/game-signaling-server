@@ -6,5 +6,4 @@ export type {
     ServerReplyData,
 } from "./message.js"
 export { throwError } from "./utilities.js"
-export { RoomState } from "./Room.js"
 export type * from "./types.js"

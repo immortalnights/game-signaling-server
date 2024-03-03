@@ -3,11 +3,11 @@ import {
     type GameOptions,
     type PlayerRecord,
     type RoomRecord,
-    RoomState,
 } from "./types.js"
 import { randomUUID } from "node:crypto"
 import { deleteItemFromArray, throwError } from "./utilities.js"
 import { broadcast } from "./broadcast.js"
+import { RoomState } from "./states.js"
 
 export class Room implements RoomRecord {
     id: string
