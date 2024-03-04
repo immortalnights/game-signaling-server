@@ -1,6 +1,7 @@
 import select, { Separator } from "@inquirer/select"
 import input from "@inquirer/input"
-import { RoomRecord, throwError } from "../signalingserver/index.js"
+import { RoomState } from "../build/signalingserver/states.js"
+import { throwError } from "../build/signalingserver/utilities.js"
 
 export const mainMenuChoices = ["single-player", "multiplayer", "quit"] as const
 export type MainMenuChoices = (typeof mainMenuChoices)[number]

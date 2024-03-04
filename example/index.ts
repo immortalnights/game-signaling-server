@@ -8,8 +8,13 @@ import {
     multiplayerServerAddress,
 } from "./cli.js"
 import { AI } from "./AI.js"
-import { Lobby, LocalPlayer, GameState, waitFor } from "../client/index.js"
-import { RoomState } from "../signalingserver/index.js"
+import {
+    Lobby,
+    LocalPlayer,
+    GameState,
+    waitFor,
+} from ".././build/node/index.js"
+import { RoomState } from "../build/signalingserver/states.js"
 
 enum State {
     MainMenu,
