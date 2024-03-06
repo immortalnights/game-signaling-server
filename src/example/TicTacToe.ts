@@ -1,11 +1,5 @@
 import { setTimeout } from "node:timers/promises"
-import {
-    Game,
-    Player,
-    GamePlayer,
-    GameState,
-    waitFor,
-} from "../client/index.js"
+import { Game, Player, GamePlayer, GameState, waitFor } from "../node/index.js"
 import type { GameOptions } from "../signalingserver/index.js"
 import { takeTurn } from "./cli.js"
 
