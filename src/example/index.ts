@@ -91,7 +91,7 @@ if (options.host) {
             await setTimeout(2000)
         }
     } catch (err) {
-        console.error("Failed to join game")
+        console.error("Failed to join game", err)
         await setTimeout(2000)
     }
 }
