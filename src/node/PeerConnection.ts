@@ -2,7 +2,9 @@ import {
     RTCPeerConnection,
     RTCDataChannel,
     RTCSessionDescription,
+    RTCIceCandidate,
 } from "werift"
+import { waitFor } from "./utilities.js"
 
 export interface PeerMessage {
     name: string
@@ -40,7 +42,10 @@ export class PeerConnection {
         this.onMessage = onMessage
     }
 
-    async offer(name: string = "default"): Promise<RTCSessionDescription> {
+    async offer(name: string = "default"): Promise<{
+        offer: RTCSessionDescription
+        iceCandidates: RTCIceCandidate[]
+    }> {
         const channel = this.pc.createDataChannel(name, {
             protocol: "default",
         })
@@ -50,7 +55,16 @@ export class PeerConnection {
         console.debug("Set local description", offer)
         await this.pc.setLocalDescription(offer)
 
-        return offer
+        let iceCandidates: RTCIceCandidate[] = []
+        this.pc.addEventListener("icecandidate", (event) => {
+            if (event.candidate) {
+                iceCandidates.push(event.candidate)
+            }
+        })
+
+        await waitFor(() => this.pc.iceGatheringState === "complete")
+
+        return { offer, iceCandidates }
     }
 
     async response(answer: RTCSessionDescription) {
@@ -67,6 +81,15 @@ export class PeerConnection {
         await this.pc.setLocalDescription(answer)
 
         return answer
+    }
+
+    async setIceCandidates(iceCandidates: RTCIceCandidate[]) {
+        console.debug(`Setting ICE candidates ${iceCandidates.length}`)
+        return Promise.allSettled(
+            iceCandidates.map((candidate) =>
+                this.pc.addIceCandidate(candidate),
+            ),
+        )
     }
 
     send(data: object | string | Buffer) {
