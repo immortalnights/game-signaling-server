@@ -168,12 +168,13 @@ export class Lobby {
 
     private handlePlayerHostGame: ClientMessageHandler["player-host-game"] = (
         player,
-        { name, options, sessionDescription },
+        { name, options, sessionDescription, iceCandidates },
     ) => {
         type Reply = ClientMessages["player-host-game"]["reply"]
 
         // Must update host with sessionDescription as room copies PlayerRecord
         player.sessionDescription = sessionDescription
+        player.iceCandidates = iceCandidates
 
         const room = new Room(
             name,

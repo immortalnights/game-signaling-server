@@ -1,4 +1,10 @@
-import type { GameOptions, RoomRecord, PlayerRecord } from "./types.js"
+import type {
+    GameOptions,
+    RoomRecord,
+    PlayerRecord,
+    RTCSessionDescriptionLike,
+    RTCIceCandidateLike,
+} from "./types.js"
 
 export interface ClientMessage {
     name: string
@@ -42,7 +48,8 @@ export interface ClientMessages {
         data: {
             name: string
             options?: GameOptions
-            sessionDescription: unknown
+            sessionDescription: RTCSessionDescriptionLike
+            iceCandidates: RTCIceCandidateLike[]
         }
         reply: ServerReplyMessages["player-host-game-reply"]
     }
@@ -58,7 +65,7 @@ export interface ClientMessages {
     }
     "player-join-game": {
         name: "player-join-game"
-        data: { id: string; sessionDescription: unknown }
+        data: { id: string; sessionDescription: RTCSessionDescriptionLike }
         reply: ServerReplyMessages["player-join-game-reply"]
     }
     "player-leave-game": {

@@ -1,5 +1,6 @@
 import { type ServerPlayer } from "./ServerPlayer.js"
 import {
+    type RTCSessionDescriptionLike,
     type GameOptions,
     type PlayerRecord,
     type RoomRecord,
@@ -34,7 +35,7 @@ export class Room implements RoomRecord {
         )
     }
 
-    join(player: ServerPlayer, sessionDescription: unknown) {
+    join(player: ServerPlayer, sessionDescription: RTCSessionDescriptionLike) {
         player.room = this.id
         this.players.push(player)
 
@@ -81,6 +82,7 @@ export class Room implements RoomRecord {
             ready: player.ready,
             host: player.host,
             sessionDescription: player.sessionDescription,
+            iceCandidates: player.host ? player.iceCandidates : undefined,
         }
     }
 

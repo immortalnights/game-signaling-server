@@ -1,10 +1,15 @@
 import { RoomState } from "./states.js"
 
+export type RTCSessionDescriptionLike = { type: unknown; sdp?: string }
+export type RTCIceCandidateLike = {}
+
 export interface PlayerRecord {
     id: string
     name: string
     ready: boolean
-    sessionDescription?: unknown | undefined
+    sessionDescription?: RTCSessionDescriptionLike | undefined
+    // Host only
+    iceCandidates?: RTCIceCandidateLike[]
     host: boolean
 }
 
