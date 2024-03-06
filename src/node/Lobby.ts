@@ -1,3 +1,4 @@
+import { RTCSessionDescription } from "werift"
 import {
     PlayerRecord,
     RoomRecord,
@@ -148,8 +149,17 @@ export class Lobby {
             throw Error("Room host does not have peer connection")
         }
 
+        if (
+            !(
+                "type" in host.sessionDescription &&
+                "sdp" in host.sessionDescription
+            )
+        ) {
+            throw Error("Room host does not have been connection")
+        }
+
         const answer = await this.player.peerConnection.answer(
-            host.sessionDescription,
+            host.sessionDescription as RTCSessionDescription,
         )
 
         this.ws?.send("player-join-game", {

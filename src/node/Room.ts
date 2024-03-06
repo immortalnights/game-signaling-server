@@ -87,12 +87,13 @@ export class Room {
             this.players.push(new RemotePlayer(id, name))
 
             if (this.host) {
-                if (sessionDescription) {
+                if (
+                    sessionDescription &&
+                    "type" in sessionDescription &&
+                    "sdp" in sessionDescription
+                ) {
                     this.player.peerConnection.response(
-                        new RTCSessionDescription(
-                            sessionDescription.sdp,
-                            sessionDescription.type,
-                        ),
+                        sessionDescription as RTCSessionDescription,
                     )
                 } else {
                     console.error(

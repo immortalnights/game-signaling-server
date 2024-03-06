@@ -47,19 +47,23 @@ export class PeerConnection {
         this.subscribeToDataChannel(channel)
 
         const offer = await this.pc.createOffer()
+        console.debug("Set local description", offer)
         await this.pc.setLocalDescription(offer)
 
         return offer
     }
 
     async response(answer: RTCSessionDescription) {
+        console.debug("Set remote description", answer)
         await this.pc.setRemoteDescription(answer)
     }
 
     async answer(offer: RTCSessionDescription): Promise<RTCSessionDescription> {
+        console.debug("Set remote description", offer)
         await this.pc.setRemoteDescription(offer)
 
         const answer = await this.pc.createAnswer()
+        console.debug("Set local description", answer)
         await this.pc.setLocalDescription(answer)
 
         return answer
