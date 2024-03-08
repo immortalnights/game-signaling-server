@@ -67,7 +67,13 @@ export class Lobby {
         )
     }
 
-    createRoom() {}
+    createRoom(player: ServerPlayer, room: Room) {
+        this.rooms.push(room)
+
+        broadcast(this.players, "lobby-room-created", room.serialize(), [
+            player.id,
+        ])
+    }
 
     deleteRoom(room: Room) {
         deleteItemFromArray(this.rooms, room)
@@ -185,7 +191,7 @@ export class Lobby {
         console.assert(player.host, "Player should now be a host!")
         console.assert(player.ready === false, "Player should not be ready!")
 
-        this.rooms.push(room)
+        this.createRoom(player, room)
 
         return {
             name: "player-host-game-reply" as const,
