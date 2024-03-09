@@ -164,8 +164,13 @@ export class Lobby {
             throw Error("Room host does not have been connection")
         }
 
+        if (!host.iceCandidates) {
+            throw Error("Room host does not have ice candidates")
+        }
+
         const answer = await this.player.peerConnection.answer(
             host.sessionDescription as RTCSessionDescription,
+            host.iceCandidates as RTCIceCandidate[],
         )
 
         this.ws?.send("player-join-game", {
@@ -178,14 +183,6 @@ export class Lobby {
         const data = (await this.ws?.waitForMessage<ReplyMessageData>(
             "player-join-game-reply",
         )) as unknown as RoomRecord
-
-        if (!host.iceCandidates) {
-            throw Error("Room host does not have ice candidates")
-        }
-
-        await this.player.peerConnection.setIceCandidates(
-            host.iceCandidates as RTCIceCandidate[],
-        )
 
         this.room = new Room(this.ws!, data, this.player)
         return this.room

@@ -72,13 +72,22 @@ export class PeerConnection {
         await this.pc.setRemoteDescription(answer)
     }
 
-    async answer(offer: RTCSessionDescription): Promise<RTCSessionDescription> {
+    async answer(
+        offer: RTCSessionDescription,
+        iceCandidates: RTCIceCandidate[],
+    ): Promise<RTCSessionDescription> {
         console.debug("Set remote description", offer)
         await this.pc.setRemoteDescription(offer)
 
         const answer = await this.pc.createAnswer()
         console.debug("Set local description", answer)
         await this.pc.setLocalDescription(answer)
+
+        await Promise.allSettled(
+            iceCandidates.map((candidate) =>
+                this.pc.addIceCandidate(candidate),
+            ),
+        )
 
         return answer
     }
