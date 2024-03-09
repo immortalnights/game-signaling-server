@@ -1,6 +1,7 @@
 export { app } from "./app.js"
 export type {
     ClientMessages,
+    ServerMessages,
     ServerMessageHandler,
     ServerReplyMessages,
     ServerReplyData,

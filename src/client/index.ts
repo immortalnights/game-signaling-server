@@ -1,5 +1,6 @@
 export type {
     ClientMessages,
+    ServerMessages,
     ServerMessageHandler,
     ServerReplyMessages,
     ServerReplyData,
