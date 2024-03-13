@@ -43,6 +43,11 @@ export interface ClientMessages {
         data: { name: string }
         reply: ServerReplyMessages["player-join-lobby-reply"]
     }
+    "player-leave-lobby": {
+        name: "player-leave-lobby"
+        data: void
+        reply: undefined
+    }
     "player-host-game": {
         name: "player-host-game"
         data: {
@@ -58,13 +63,16 @@ export interface ClientMessages {
         data: void
         reply: ServerReplyMessages["player-list-games-reply"]
     }
+    // FIXME remove, use leave-game instead
     "player-delete-game": {
         name: "player-delete-game"
+        // FIXME id should not be required
         data: { id: string }
         reply: undefined
     }
     "player-join-game": {
         name: "player-join-game"
+        // FIXME id should not be required
         data: { id: string; sessionDescription: RTCSessionDescriptionLike }
         reply: ServerReplyMessages["player-join-game-reply"]
     }
@@ -75,11 +83,13 @@ export interface ClientMessages {
     }
     "player-change-ready-state": {
         type: "player-change-ready-state"
+        // FIXME id should not be required
         data: { id: string; ready: boolean }
         reply: undefined
     }
     "player-start-game": {
         type: "player-start-game"
+        // FIXME id should not be required
         data: { id: string }
         reply: undefined
     }
@@ -88,7 +98,7 @@ export interface ClientMessages {
 export interface ServerReplyMessages {
     "player-join-lobby-reply": ServerReplyMessage<
         "player-join-lobby-reply",
-        { id: string }
+        { id: string; name: string }
     >
     "player-host-game-reply": ServerReplyMessage<
         "player-host-game-reply",

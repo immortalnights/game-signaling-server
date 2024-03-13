@@ -9,6 +9,7 @@ import { RoomState } from "./states.js"
 
 type LobbyMessageTypes =
     | "player-join-lobby"
+    | "player-leave-lobby"
     | "player-host-game"
     | "player-list-games"
     | "player-delete-game"
@@ -35,6 +36,7 @@ export class Lobby {
 
         this.messageHandlers = {
             "player-join-lobby": this.handlePlayerJoinLobby,
+            "player-leave-lobby": this.handlePlayerLeaveLobby,
             "player-host-game": this.handlePlayerHostGame,
             "player-list-games": this.handlePlayerListGames,
             "player-delete-game": this.handlePlayerDeleteGame,
@@ -54,8 +56,6 @@ export class Lobby {
 
     // Join the lobby
     join(player: ServerPlayer) {
-        this.players.push(player)
-
         broadcast(
             this.players,
             "lobby-player-connected",
@@ -108,6 +108,8 @@ export class Lobby {
                     `Player '${player.name}' is in room '${room.name}'`,
                 )
 
+                // Leaving one by one will cause a crash if two player leave at the same time.
+                // Or if for some reason any 'player' has a disconnected socket.
                 room.leave(player)
 
                 if (room.state === RoomState.Closed) {
@@ -117,39 +119,50 @@ export class Lobby {
                 console.debug(`Player '${player.name}' was not in a room'`)
             }
         } else {
-            console.error("Failed to find ServerPlayer for disconnected player")
+            console.debug("Failed to find ServerPlayer for disconnected player")
         }
     }
 
     handleMessage(ws: WebSocket<UserData>, message: ClientMessage): void {
         let player
         if (message.name === "player-join-lobby") {
-            // TODO check the player doesn't already exist
+            player = this.players.find((player) => player.ws === ws)
 
-            player = {
-                ws,
-                id: ws.getUserData().id,
-                name: "-unnamed-",
-                host: false,
-                ready: false,
-                sessionDescription: undefined,
-            } satisfies ServerPlayer
+            if (!player) {
+                console.debug("New player connected", message.data.name)
+                player = {
+                    ws,
+                    id: ws.getUserData().id,
+                    name: message.data.name,
+                    host: false,
+                    ready: false,
+                    sessionDescription: undefined,
+                } satisfies ServerPlayer
+
+                // Awkward place to do this, but must ensure it's only ever done once.
+                this.players.push(player)
+            }
         } else {
-            player = this.getPlayer(ws)
+            player = this.players.find((player) => player.ws === ws)
         }
 
-        const name = message.name as LobbyMessageTypes
-        if (this.messageHandlers[name]) {
-            let response = this.messageHandlers[name](
-                player,
-                message.data as any,
-            )
+        if (!player) {
+            // Ignore the message if the player sends a message before officially
+            // joining the lobby or after they have left.
+        } else {
+            const name = message.name as LobbyMessageTypes
+            if (this.messageHandlers[name]) {
+                let response = this.messageHandlers[name](
+                    player,
+                    message.data as any,
+                )
 
-            if (response) {
-                console.debug("Reply", response)
-                player.ws.send(JSON.stringify(response))
-            } else {
-                console.debug("No reply provided for", message.name)
+                if (response) {
+                    console.debug("Reply", response)
+                    player?.ws.send(JSON.stringify(response))
+                } else {
+                    console.debug("No reply provided for", message.name)
+                }
             }
         }
     }
@@ -168,9 +181,15 @@ export class Lobby {
             success: true,
             data: {
                 id: player.id,
+                name: player.name,
             },
         } satisfies Reply
     }
+
+    private handlePlayerLeaveLobby: ClientMessageHandler["player-leave-lobby"] =
+        (player: ServerPlayer) => {
+            this.leave(player)
+        }
 
     private handlePlayerHostGame: ClientMessageHandler["player-host-game"] = (
         player,
@@ -216,7 +235,7 @@ export class Lobby {
 
     private handlePlayerDeleteGame: ClientMessageHandler["player-delete-game"] =
         (player, { id: gameId }) => {
-            //TODO broadcast
+            console.debug("handlePlayerDeleteGame unimplemented")
         }
 
     private handlePlayerJoinGame: ClientMessageHandler["player-join-game"] = (
@@ -262,7 +281,9 @@ export class Lobby {
 
     private handlePlayerLeaveGame: ClientMessageHandler["player-leave-game"] = (
         player,
-    ) => {}
+    ) => {
+        console.debug("handlePlayerLeaveGame unimplemented")
+    }
 
     private handlePlayerChangeReadyState: ClientMessageHandler["player-change-ready-state"] =
         (player, { id, ready }) => {
