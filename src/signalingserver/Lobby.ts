@@ -80,6 +80,7 @@ export class Lobby {
 
         broadcast(this.players, "lobby-room-deleted", {
             id: room.id,
+            name: room.name,
         })
     }
 
@@ -87,37 +88,41 @@ export class Lobby {
     leave(player: ServerPlayer) {
         deleteItemFromArray(this.players, player)
 
-        broadcast(this.players, "lobby-player-disconnected", {
-            id: player.id,
-        })
+        if (player.room) {
+            const room =
+                this.rooms.find((room) => room.id === player.room) ??
+                throwError(
+                    `Failed to find room '${player.room}' for player '${player.id}'`,
+                )
+
+            console.debug(`Player '${player.name}' is in room '${room.name}'`)
+
+            // Leaving one by one will cause a crash if two player leave at the same time.
+            // Or if for some reason any 'player' has a disconnected socket.
+            room.leave(player)
+
+            if (room.state === RoomState.Closed) {
+                this.deleteRoom(room)
+            }
+        } else {
+            console.debug(`Player '${player.name}' was not in a room'`)
+        }
+
+        broadcast(
+            this.players,
+            "lobby-player-disconnected",
+            {
+                id: player.id,
+                name: player.name,
+            },
+            [player.id],
+        )
     }
 
     disconnected(ws: WebSocket<UserData>) {
         const player = this.players.find((player) => player.ws === ws)
         if (player) {
             this.leave(player)
-
-            if (player.room) {
-                const room =
-                    this.rooms.find((room) => room.id === player.room) ??
-                    throwError(
-                        `Failed to find room '${player.room}' for player '${player.id}'`,
-                    )
-
-                console.debug(
-                    `Player '${player.name}' is in room '${room.name}'`,
-                )
-
-                // Leaving one by one will cause a crash if two player leave at the same time.
-                // Or if for some reason any 'player' has a disconnected socket.
-                room.leave(player)
-
-                if (room.state === RoomState.Closed) {
-                    this.deleteRoom(room)
-                }
-            } else {
-                console.debug(`Player '${player.name}' was not in a room'`)
-            }
         } else {
             console.debug("Failed to find ServerPlayer for disconnected player")
         }
@@ -149,6 +154,7 @@ export class Lobby {
         if (!player) {
             // Ignore the message if the player sends a message before officially
             // joining the lobby or after they have left.
+            console.warn(`Ignored message ${message.name} from unknown player`)
         } else {
             const name = message.name as LobbyMessageTypes
             if (this.messageHandlers[name]) {
