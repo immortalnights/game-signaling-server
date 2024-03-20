@@ -14,12 +14,14 @@ export const broadcast = <T extends keyof ServerMessages>(
             console.debug(`Broadcast ${name} to ${player.id}`)
 
             const preparedData = data instanceof Function ? data(player) : data
-            player.ws.send(
-                JSON.stringify({
-                    name,
-                    data: preparedData,
-                }),
-            )
+            if (player.ws) {
+                player.ws.send(
+                    JSON.stringify({
+                        name,
+                        data: preparedData,
+                    }),
+                )
+            }
         }
     })
 }
