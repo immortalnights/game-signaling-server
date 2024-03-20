@@ -19,7 +19,7 @@ export class Room implements RoomRecord {
 
     constructor(name: string, options: GameOptions, host: ServerPlayer) {
         this.id = randomUUID()
-        this.name = name
+        this.name = name || `${host.name}'s Game`
         this.state = RoomState.Open
         this.options = options
         this.players = [host]
@@ -31,7 +31,7 @@ export class Room implements RoomRecord {
     get host(): ServerPlayer {
         return (
             this.players.find((player) => player.host) ??
-            throwError("Failed to find host")
+            throwError(`Failed to find host for room ${this.id}`)
         )
     }
 
@@ -39,7 +39,7 @@ export class Room implements RoomRecord {
         player.room = this.id
         this.players.push(player)
 
-        console.assert(
+        console.error(
             sessionDescription,
             `Player ${player.id} did not provide sessionDescription when joining room`,
         )
@@ -87,8 +87,6 @@ export class Room implements RoomRecord {
     }
 
     serialize(): RoomRecord {
-        const host = this.host
-
         return {
             id: this.id,
             name: this.name,
