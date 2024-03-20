@@ -58,6 +58,11 @@ export interface ClientMessages {
         }
         reply: ServerReplyMessages["player-host-game-reply"]
     }
+    "player-list-players": {
+        name: "player-list-players"
+        data: void
+        reply: ServerReplyMessages["player-list-players-reply"]
+    }
     "player-list-games": {
         name: "player-list-games"
         data: void
@@ -107,6 +112,10 @@ export interface ServerReplyMessages {
     "player-list-games-reply": ServerReplyMessage<
         "player-list-games-reply",
         { games: RoomRecord[] }
+    >
+    "player-list-players-reply": ServerReplyMessage<
+        "player-list-games-players",
+        { players: PlayerRecord[] }
     >
     "player-join-game-reply": ServerReplyMessage<
         "player-join-game-reply",
