@@ -15,6 +15,8 @@ type LobbyMessageTypes =
     | "player-delete-game"
     | "player-join-game"
     | "player-leave-game"
+    | "player-connect-to-peer"
+    | "player-connect-to-host"
     | "player-change-ready-state"
     | "player-start-game"
 
@@ -43,6 +45,8 @@ export class Lobby {
             "player-join-game": this.handlePlayerJoinGame,
             "player-leave-game": this.handlePlayerLeaveGame,
             "player-change-ready-state": this.handlePlayerChangeReadyState,
+            "player-connect-to-peer": this.handlePlayerConnectToPeer,
+            "player-connect-to-host": this.handlePlayerConnectToHost,
             "player-start-game": this.handlePlayerStartGame,
         }
     }
@@ -303,6 +307,46 @@ export class Lobby {
                     id,
                     ready,
                 })
+            }
+        }
+
+    private handlePlayerConnectToPeer: ClientMessageHandler["player-connect-to-peer"] =
+        (player, { peer, offer, candidates }) => {
+            console.assert(player.room, "Player is not a member of a room")
+            const room = this.rooms.find((room) => room.id === player.room)
+            if (room) {
+                const otherPlayer = room.players.find((p) => p.id === peer)
+                if (otherPlayer) {
+                    const data = {
+                        name: "room-player-rtc-host-offer",
+                        data: {
+                            id: player.id,
+                            sessionDescription: offer,
+                            iceCandidates: candidates,
+                        },
+                    }
+
+                    console.debug("Sending host offer to peer", data)
+                    otherPlayer.ws.send(JSON.stringify(data))
+                }
+            }
+        }
+
+    private handlePlayerConnectToHost: ClientMessageHandler["player-connect-to-host"] =
+        (player, { answer }) => {
+            console.assert(player.room, "Player is not a member of a room")
+            const room = this.rooms.find((room) => room.id === player.room)
+            if (room) {
+                const data = {
+                    name: "room-player-rtc-answer",
+                    data: {
+                        id: player.id,
+                        sessionDescription: answer,
+                    },
+                }
+
+                console.debug("Sending peer answer to host", data)
+                room.host.ws.send(JSON.stringify(data))
             }
         }
 

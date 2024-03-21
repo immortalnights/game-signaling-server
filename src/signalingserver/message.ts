@@ -86,6 +86,26 @@ export interface ClientMessages {
         data: void
         reply: undefined
     }
+    "player-connect-to-peer": {
+        type: "player-connect-to-peer"
+        data: {
+            peer: string
+            offer: RTCSessionDescriptionLike
+            candidates: RTCIceCandidateLike
+        }
+        reply: void
+    }
+    "player-connect-to-host": {
+        type: "player-connect-to-host"
+        data: { answer: RTCSessionDescriptionLike }
+        reply: void
+    }
+    // not implemented
+    "player-exchange-ice-candidates": {
+        type: "player-exchange-ice-candidates"
+        data: { peer: string; candidates: RTCIceCandidateLike }
+        reply: void
+    }
     "player-change-ready-state": {
         type: "player-change-ready-state"
         // FIXME id should not be required
@@ -160,6 +180,14 @@ export interface ServerMessages {
     "room-player-ready-change": {
         name: "room-player-ready-change"
         data: Pick<PlayerRecord, "id" | "ready">
+    }
+    "room-player-rtc-host-offer": {
+        name: "room-player-rtc-host-offer"
+        data: Pick<PlayerRecord, "id" | "sessionDescription" | "iceCandidates">
+    }
+    "room-player-rtc-answer": {
+        name: "room-player-rtc-answer"
+        data: Pick<PlayerRecord, "id" | "sessionDescription">
     }
     "room-start-game": {
         name: "room-start-game"
