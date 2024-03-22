@@ -54,7 +54,7 @@ export interface ClientMessages {
             name: string
             options?: GameOptions
             sessionDescription: RTCSessionDescriptionLike
-            iceCandidates: RTCIceCandidateLike[]
+            candidates: RTCIceCandidateLike[]
         }
         reply: ServerReplyMessages["player-host-game-reply"]
     }
@@ -183,7 +183,7 @@ export interface ServerMessages {
     }
     "room-player-rtc-host-offer": {
         name: "room-player-rtc-host-offer"
-        data: Pick<PlayerRecord, "id" | "sessionDescription" | "iceCandidates">
+        data: Pick<PlayerRecord, "id" | "sessionDescription" | "candidates">
     }
     "room-player-rtc-answer": {
         name: "room-player-rtc-answer"

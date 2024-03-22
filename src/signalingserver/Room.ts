@@ -82,7 +82,7 @@ export class Room implements RoomRecord {
             ready: player.ready,
             host: player.host,
             sessionDescription: player.sessionDescription,
-            iceCandidates: player.host ? player.iceCandidates : undefined,
+            candidates: player.host ? player.candidates : undefined,
         }
     }
 

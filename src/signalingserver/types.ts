@@ -9,7 +9,7 @@ export interface PlayerRecord {
     ready: boolean
     sessionDescription?: RTCSessionDescriptionLike | undefined
     // Host only
-    iceCandidates?: RTCIceCandidateLike[]
+    candidates?: RTCIceCandidateLike[]
     host: boolean
 }
 
