@@ -119,7 +119,7 @@ export class TicTakToe extends Game {
     }
 
     async takeTurn(player: Player, position: number) {
-        this.handlePlayerInput(player, {
+        this.handlePlayerInput({
             move: position,
         })
     }
