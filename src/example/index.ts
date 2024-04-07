@@ -106,15 +106,10 @@ while (play) {
             switch (choice) {
                 case "single-player": {
                     console.log("Start a single player game")
-                    game = new TicTakToe(
-                        player.id,
-                        [player, new AI()],
-                        "LocalGame",
-                        {
-                            minPlayers: 2,
-                            maxPlayers: 2,
-                        },
-                    )
+                    game = new TicTakToe([player, new AI()], "LocalGame", {
+                        minPlayers: 2,
+                        maxPlayers: 2,
+                    })
                     state = State.LocalPlayerTurn
                     break
                 }
