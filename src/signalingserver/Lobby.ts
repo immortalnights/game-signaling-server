@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { Room } from "./Room.js"
 import type { ServerPlayer } from "./ServerPlayer.js"
 import type { UserData } from "./app.js"
@@ -146,6 +147,7 @@ export class Lobby {
                     host: false,
                     ready: false,
                     sessionDescription: undefined,
+                    autoReady: false,
                 } satisfies ServerPlayer
 
                 // Awkward place to do this, but must ensure it's only ever done once.
@@ -203,13 +205,15 @@ export class Lobby {
 
     private handlePlayerHostGame: ClientMessageHandler["player-host-game"] = (
         player,
-        { name, options, sessionDescription, candidates },
+        { name, options, sessionDescription, candidates, autoReady },
     ) => {
         type Reply = ClientMessages["player-host-game"]["reply"]
 
         // Must update host with sessionDescription as room copies PlayerRecord
         player.sessionDescription = sessionDescription
         player.candidates = candidates
+        player.autoReady = autoReady ?? false
+        player.ready = autoReady ?? false
 
         const room = new Room(
             name,
@@ -218,7 +222,6 @@ export class Lobby {
         )
 
         console.assert(player.host, "Player should now be a host!")
-        console.assert(player.ready === false, "Player should not be ready!")
 
         this.createRoom(player, room)
 
@@ -250,7 +253,7 @@ export class Lobby {
 
     private handlePlayerJoinGame: ClientMessageHandler["player-join-game"] = (
         player,
-        { id: gameId, sessionDescription },
+        { id: gameId, sessionDescription, autoReady },
     ) => {
         type Reply = ClientMessages["player-join-game"]["reply"]
 
@@ -259,12 +262,8 @@ export class Lobby {
         let reply
         if (room) {
             if (room.players.length < room.options.maxPlayers) {
+                player.ready = autoReady ?? false
                 room.join(player, sessionDescription)
-
-                console.assert(
-                    player.ready === false,
-                    "Player should not be ready!",
-                )
 
                 reply = {
                     name: "player-join-game-reply",
@@ -360,7 +359,17 @@ export class Lobby {
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
                 room.state = RoomState.Locked
-                broadcast(room.players, "room-start-game", { id: room.id })
+
+                const gameId = randomUUID()
+                room.players.forEach((p) => {
+                    p.room = undefined
+                    p.game = gameId
+                })
+
+                broadcast(room.players, "room-start-game", {
+                    room: room.id,
+                    game: gameId,
+                })
             } else {
                 console.error(`Player ${player.id} is in a room`)
             }

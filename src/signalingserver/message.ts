@@ -55,6 +55,7 @@ export interface ClientMessages {
             options?: GameOptions
             sessionDescription: RTCSessionDescriptionLike
             candidates: RTCIceCandidateLike[]
+            autoReady?: boolean
         }
         reply: ServerReplyMessages["player-host-game-reply"]
     }
@@ -78,7 +79,11 @@ export interface ClientMessages {
     "player-join-game": {
         name: "player-join-game"
         // FIXME id should not be required
-        data: { id: string; sessionDescription: RTCSessionDescriptionLike }
+        data: {
+            id: string
+            sessionDescription: RTCSessionDescriptionLike
+            autoReady?: boolean
+        }
         reply: ServerReplyMessages["player-join-game-reply"]
     }
     "player-leave-game": {
@@ -191,7 +196,10 @@ export interface ServerMessages {
     }
     "room-start-game": {
         name: "room-start-game"
-        data: Pick<RoomRecord, "id">
+        data: {
+            room: string
+            game: string
+        }
     }
     "room-closed": {
         name: "room-closed"
