@@ -120,7 +120,7 @@ export abstract class Game {
                     ),
                 )
 
-                console.log("Game is not playing...")
+                console.log("Game is now playing...")
                 this.setGameState(GameState.Playing)
 
                 console.log("Host setup is complete")
