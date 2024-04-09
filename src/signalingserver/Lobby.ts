@@ -12,6 +12,7 @@ type LobbyMessageTypes =
     | "player-join-lobby"
     | "player-leave-lobby"
     | "player-host-game"
+    | "player-list-players"
     | "player-list-games"
     | "player-delete-game"
     | "player-join-game"
@@ -41,6 +42,7 @@ export class Lobby {
             "player-join-lobby": this.handlePlayerJoinLobby,
             "player-leave-lobby": this.handlePlayerLeaveLobby,
             "player-host-game": this.handlePlayerHostGame,
+            "player-list-players": this.handlePlayerListPlayers,
             "player-list-games": this.handlePlayerListGames,
             "player-delete-game": this.handlePlayerDeleteGame,
             "player-join-game": this.handlePlayerJoinGame,
@@ -231,6 +233,11 @@ export class Lobby {
             data: room.serialize(),
         } satisfies Reply
     }
+
+    private handlePlayerListPlayers: ClientMessageHandler["player-list-players"] =
+        (player) => {
+            console.log(`Have ${this.players.length} players in lobby`)
+        }
 
     private handlePlayerListGames: ClientMessageHandler["player-list-games"] = (
         player,
