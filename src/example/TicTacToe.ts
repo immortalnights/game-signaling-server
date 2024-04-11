@@ -3,13 +3,13 @@ import { Game, Player, GamePlayer, GameState, waitFor } from "../node/index.js"
 import type { GameOptions } from "../signalingserver/index.js"
 import { takeTurn } from "./cli.js"
 
-type Tokens = "O" | "X"
+type Token = "O" | "X"
 
 export class TicTakToe extends Game {
-    token: Tokens
-    turn: Tokens
-    spaces: (Tokens | undefined)[]
-    winner: Tokens | undefined
+    token: Token
+    turn: Token
+    spaces: (Token | undefined)[]
+    winner: Token | undefined
     lastPlayer: string | undefined
 
     constructor(players: Player[], name: string, options: GameOptions) {
@@ -71,7 +71,10 @@ export class TicTakToe extends Game {
         }
     }
 
-    protected actionPlayerInput(player: GamePlayer, input: object): void {
+    protected actionPlayerInput(
+        player: GamePlayer,
+        input: { move: number },
+    ): void {
         if (this.host) {
             console.log(`Apply turn for ${player.id}`)
             // Apply the turn
@@ -107,7 +110,12 @@ export class TicTakToe extends Game {
         }
     }
 
-    protected handleGameUpdate(update: object): void {
+    protected handleGameUpdate(update: {
+        state: GameState
+        spaces: Token[]
+        turn: Token
+        winner: Token
+    }): void {
         if (!this.host) {
             this.state = update.state
             this.spaces = update.spaces
@@ -124,7 +132,7 @@ export class TicTakToe extends Game {
         })
     }
 
-    takePlayerTurn(token: Tokens, position: number) {
+    takePlayerTurn(token: Token, position: number) {
         if (token !== "O" && token !== "X") {
             throw Error("Invalid player")
         }

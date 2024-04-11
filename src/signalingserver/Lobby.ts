@@ -5,7 +5,7 @@ import type { UserData } from "./app.js"
 import type { ClientMessage, ClientMessages } from "./message.js"
 import { WebSocket } from "uWebSockets.js"
 import { deleteItemFromArray, throwError } from "./utilities.js"
-import { broadcast } from "./broadcast.js"
+import { broadcast, sendTo } from "./broadcast.js"
 import { RoomState } from "./states.js"
 
 type LobbyMessageTypes =
@@ -25,7 +25,7 @@ type LobbyMessageTypes =
 export type ClientMessageHandler = {
     [K in keyof ClientMessages]: (
         player: ServerPlayer,
-        data: ClientMessages[K]["data"],
+        body: ClientMessages[K]["body"],
     ) => ClientMessages[K]["reply"]
 }
 
@@ -141,11 +141,11 @@ export class Lobby {
             player = this.players.find((player) => player.ws === ws)
 
             if (!player) {
-                console.debug("New player connected", message.data.name)
+                console.debug("New player connected", message.body.name)
                 player = {
                     ws,
                     id: ws.getUserData().id,
-                    name: message.data.name,
+                    name: message.body.name,
                     host: false,
                     ready: false,
                     sessionDescription: undefined,
@@ -168,7 +168,7 @@ export class Lobby {
             if (this.messageHandlers[name]) {
                 let response = this.messageHandlers[name](
                     player,
-                    message.data as any,
+                    message.body as any,
                 )
 
                 if (response) {
@@ -193,7 +193,7 @@ export class Lobby {
         return {
             name: "player-join-lobby-reply" as const,
             success: true,
-            data: {
+            body: {
                 id: player.id,
                 name: player.name,
             },
@@ -230,13 +230,18 @@ export class Lobby {
         return {
             name: "player-host-game-reply" as const,
             success: true,
-            data: room.serialize(),
+            body: room.serialize(),
         } satisfies Reply
     }
 
     private handlePlayerListPlayers: ClientMessageHandler["player-list-players"] =
-        (player) => {
+        (player, body) => {
             console.log(`Have ${this.players.length} players in lobby`)
+            return {
+                name: "player-list-games-players",
+                success: true,
+                body: { players: [] },
+            }
         }
 
     private handlePlayerListGames: ClientMessageHandler["player-list-games"] = (
@@ -249,7 +254,7 @@ export class Lobby {
         return {
             name: "player-list-games-reply" as const,
             success: true,
-            data: { games },
+            body: { games },
         } satisfies Reply
     }
 
@@ -275,7 +280,7 @@ export class Lobby {
                 reply = {
                     name: "player-join-game-reply",
                     success: true,
-                    data: room.serialize(),
+                    body: room.serialize(),
                 } satisfies Reply
             } else {
                 reply = {
@@ -323,17 +328,12 @@ export class Lobby {
             if (room) {
                 const otherPlayer = room.players.find((p) => p.id === peer)
                 if (otherPlayer) {
-                    const data = {
-                        name: "room-player-rtc-host-offer",
-                        data: {
-                            id: player.id,
-                            sessionDescription: offer,
-                            candidates,
-                        },
-                    }
-
-                    console.debug("Sending host offer to peer", data)
-                    otherPlayer.ws.send(JSON.stringify(data))
+                    console.debug("Sending host offer to peer")
+                    sendTo(otherPlayer, "room-player-rtc-host-offer", {
+                        id: player.id,
+                        sessionDescription: offer,
+                        candidates,
+                    })
                 }
             }
         }
@@ -343,16 +343,11 @@ export class Lobby {
             console.assert(player.room, "Player is not a member of a room")
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
-                const data = {
-                    name: "room-player-rtc-answer",
-                    data: {
-                        id: player.id,
-                        sessionDescription: answer,
-                    },
-                }
-
-                console.debug("Sending peer answer to host", data)
-                room.host.ws.send(JSON.stringify(data))
+                console.debug("Sending peer answer to host")
+                sendTo(room.host, "room-player-rtc-answer", {
+                    id: player.id,
+                    sessionDescription: answer,
+                })
             }
         }
 

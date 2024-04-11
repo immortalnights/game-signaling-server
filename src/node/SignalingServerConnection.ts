@@ -108,13 +108,13 @@ export class SignalingServerConnection {
 
     send<T extends keyof ClientMessages>(
         name: T,
-        data?: ClientMessages[T]["data"],
+        data?: ClientMessages[T]["body"],
     ) {
         if (this.ws) {
             this.ws.send(
                 JSON.stringify({
                     name,
-                    data: data,
+                    body: data,
                 }),
             )
         }

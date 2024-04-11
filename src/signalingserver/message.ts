@@ -8,21 +8,21 @@ import type {
 
 export interface ClientMessage {
     name: string
-    data: unknown
+    body: unknown
     reply: ServerMessages
 }
 
 export type ServerMessage = {
     name: string
-    data: unknown
+    body: unknown
 }
 
-export type ServerReplyMessage<Name, Data> = {
+export type ServerReplyMessage<Name, Body> = {
     name: Name
 } & (
     | {
           success: true
-          data: Data
+          body: Body
       }
     | {
           success: false
@@ -40,17 +40,17 @@ export type GeneralServerReplyMessage =
 export interface ClientMessages {
     "player-join-lobby": {
         name: "player-join-lobby"
-        data: { name: string }
+        body: { name: string }
         reply: ServerReplyMessages["player-join-lobby-reply"]
     }
     "player-leave-lobby": {
         name: "player-leave-lobby"
-        data: void
+        body: void
         reply: undefined
     }
     "player-host-game": {
         name: "player-host-game"
-        data: {
+        body: {
             name: string
             options?: GameOptions
             sessionDescription: RTCSessionDescriptionLike
@@ -61,25 +61,25 @@ export interface ClientMessages {
     }
     "player-list-players": {
         name: "player-list-players"
-        data: void
+        body: void
         reply: ServerReplyMessages["player-list-players-reply"]
     }
     "player-list-games": {
         name: "player-list-games"
-        data: void
+        body: void
         reply: ServerReplyMessages["player-list-games-reply"]
     }
     // FIXME remove, use leave-game instead
     "player-delete-game": {
         name: "player-delete-game"
         // FIXME id should not be required
-        data: { id: string }
+        body: { id: string }
         reply: undefined
     }
     "player-join-game": {
         name: "player-join-game"
         // FIXME id should not be required
-        data: {
+        body: {
             id: string
             sessionDescription: RTCSessionDescriptionLike
             autoReady?: boolean
@@ -88,39 +88,39 @@ export interface ClientMessages {
     }
     "player-leave-game": {
         name: "player-leave-game"
-        data: void
+        body: void
         reply: undefined
     }
     "player-connect-to-peer": {
         type: "player-connect-to-peer"
-        data: {
+        body: {
             peer: string
             offer: RTCSessionDescriptionLike
-            candidates: RTCIceCandidateLike
+            candidates: RTCIceCandidateLike[]
         }
         reply: void
     }
     "player-connect-to-host": {
         type: "player-connect-to-host"
-        data: { answer: RTCSessionDescriptionLike }
+        body: { answer: RTCSessionDescriptionLike }
         reply: void
     }
     // not implemented
     "player-exchange-ice-candidates": {
         type: "player-exchange-ice-candidates"
-        data: { peer: string; candidates: RTCIceCandidateLike }
+        body: { peer: string; candidates: RTCIceCandidateLike }
         reply: void
     }
     "player-change-ready-state": {
         type: "player-change-ready-state"
         // FIXME id should not be required
-        data: { id: string; ready: boolean }
+        body: { id: string; ready: boolean }
         reply: undefined
     }
     "player-start-game": {
         type: "player-start-game"
         // FIXME id should not be required
-        data: { id: string }
+        body: { id: string }
         reply: undefined
     }
 }
@@ -150,63 +150,63 @@ export interface ServerReplyMessages {
 
 export type ServerReplyData<T extends keyof ServerReplyMessages> =
     ServerReplyMessages[T] extends { success: true }
-        ? ServerReplyMessages[T]["data"]
+        ? ServerReplyMessages[T]["body"]
         : undefined
 
 export interface ServerMessages {
     "server-error": {
         name: "server-error"
-        data: { error: string }
+        body: { error: string }
     }
     "lobby-player-connected": {
         name: "lobby-player-connected"
-        data: Pick<PlayerRecord, "id" | "name">
+        body: Pick<PlayerRecord, "id" | "name">
     }
     "lobby-player-disconnected": {
         name: "lobby-player-disconnected"
-        data: Pick<PlayerRecord, "id">
+        body: Pick<PlayerRecord, "id">
     }
     "lobby-room-created": {
         name: "lobby-room-created"
-        data: RoomRecord
+        body: RoomRecord
     }
     "lobby-room-deleted": {
         name: "lobby-room-deleted"
-        data: Pick<RoomRecord, "id">
+        body: Pick<RoomRecord, "id">
     }
     "room-player-connected": {
         name: "room-player-connected"
-        data: PlayerRecord
+        body: PlayerRecord
     }
     "room-player-disconnected": {
         name: "room-player-disconnected"
-        data: Pick<PlayerRecord, "id">
+        body: Pick<PlayerRecord, "id">
     }
     "room-player-ready-change": {
         name: "room-player-ready-change"
-        data: Pick<PlayerRecord, "id" | "ready">
+        body: Pick<PlayerRecord, "id" | "ready">
     }
     "room-player-rtc-host-offer": {
         name: "room-player-rtc-host-offer"
-        data: Pick<PlayerRecord, "id" | "sessionDescription" | "candidates">
+        body: Pick<PlayerRecord, "id" | "sessionDescription" | "candidates">
     }
     "room-player-rtc-answer": {
         name: "room-player-rtc-answer"
-        data: Pick<PlayerRecord, "id" | "sessionDescription">
+        body: Pick<PlayerRecord, "id" | "sessionDescription">
     }
     "room-start-game": {
         name: "room-start-game"
-        data: {
+        body: {
             room: string
             game: string
         }
     }
     "room-closed": {
         name: "room-closed"
-        data: Pick<RoomRecord, "id">
+        body: Pick<RoomRecord, "id">
     }
 }
 
 export type ServerMessageHandler = {
-    [K in keyof ServerMessages]: (data: ServerMessages[K]["data"]) => void
+    [K in keyof ServerMessages]: (data: ServerMessages[K]["body"]) => void
 }

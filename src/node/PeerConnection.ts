@@ -9,7 +9,7 @@ import { waitFor } from "./utilities.js"
 export interface PeerMessage {
     name: string
     player?: string
-    data?: object
+    body?: any
 }
 
 export type PeerConnectionMessageCallback = (data: PeerMessage) => void

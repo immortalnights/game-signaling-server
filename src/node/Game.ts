@@ -165,34 +165,34 @@ export abstract class Game {
             const name = message.name as string // FIXME
             if (this.host) {
                 const player = this.players.find(
-                    (player) => player.id === message.data.player,
+                    (player) => player.id === message.body.player,
                 )
 
                 if (player) {
                     if (name === "player-state-update") {
-                        this.setPlayerState(player, message.data.state)
+                        this.setPlayerState(player, message.body.state)
                     } else if (name === "player-chat") {
-                        this.handlePlayerChat(player, message.data ?? {})
+                        this.handlePlayerChat(player, message.body ?? {})
                     } else if (name === "player-input") {
-                        this.actionPlayerInput(player, message.data ?? {})
+                        this.actionPlayerInput(player, message.body ?? {})
                     }
                 } else {
                     console.error(
-                        `Failed to find player ${message.data.player}`,
+                        `Failed to find player ${message.body.player}`,
                     )
                 }
             } else {
                 if (name === "game-state-update") {
-                    this.state = message.data.state
+                    this.state = message.body.state
                 } else if (name === "game-update") {
                     if (this.state === GameState.Setup) {
-                        this.handleInitialGameDate(message.data ?? {})
+                        this.handleInitialGameDate(message.body ?? {})
                         this.setPlayerState(
                             this.localPlayer,
                             GamePlayerState.Ready,
                         )
                     } else {
-                        this.handleGameUpdate(message.data ?? {})
+                        this.handleGameUpdate(message.body ?? {})
                     }
                 }
             }
@@ -218,7 +218,7 @@ export abstract class Game {
             console.debug("Sending player input")
             this.peerConnection.send({
                 name: "player-input",
-                data: { player: this.localPlayer.id, ...input },
+                body: { player: this.localPlayer.id, ...input },
             })
         }
     }
@@ -228,7 +228,7 @@ export abstract class Game {
             this.state = state
             this.peerConnection.send({
                 name: "game-state-update",
-                data: { state: this.state },
+                body: { state: this.state },
             })
         } else {
             this.state = GameState.Playing
@@ -243,7 +243,7 @@ export abstract class Game {
         } else {
             this.peerConnection.send({
                 name: "player-state-update",
-                data: {
+                body: {
                     player: player.id,
                     state,
                 },
@@ -258,7 +258,7 @@ export abstract class Game {
             console.debug("Sending game update...")
             this.peerConnection.send({
                 name: "game-update",
-                data,
+                body: data,
             })
         }
     }
