@@ -35,43 +35,39 @@ export class Room implements RoomRecord {
         )
     }
 
-    join(player: ServerPlayer, sessionDescription: RTCSessionDescriptionLike) {
+    join(player: ServerPlayer) {
         player.room = this.id
         this.players.push(player)
-
-        console.error(
-            sessionDescription,
-            `Player ${player.id} did not provide sessionDescription when joining room`,
-        )
 
         broadcast(
             this.players,
             "room-player-connected",
-            (target) =>
-                this.serializePlayer({
-                    ...player,
-                    sessionDescription: target.host
-                        ? sessionDescription
-                        : undefined,
-                }),
+            this.serializePlayer(player),
             [player.id],
         )
     }
 
     leave(player: ServerPlayer) {
-        console.debug(`Player '${player.name}' has left room '${this.name}'`)
+        console.debug(
+            `Player '${player.name}' has left room '${this.name}' (${player.host})`,
+        )
+
+        const isHost =
+            this.players.find((p) => p.id === player.id)?.host ?? false
 
         deleteItemFromArray(this.players, player)
 
         player.room = undefined
+        player.host = false
 
         broadcast(this.players, "room-player-disconnected", {
             id: player.id,
         })
 
-        if (this.players.length === 0) {
-            console.debug(`Closing empty room '${this.name}'`)
+        if (isHost || this.players.length === 0) {
+            console.debug(`Closing abandoned room '${this.name}'`)
             this.state = RoomState.Closed
+            broadcast(this.players, "room-closed", { id: this.id })
         }
     }
 
@@ -81,8 +77,6 @@ export class Room implements RoomRecord {
             name: player.name,
             ready: player.ready,
             host: player.host,
-            sessionDescription: player.sessionDescription,
-            candidates: player.host ? player.candidates : undefined,
         }
     }
 

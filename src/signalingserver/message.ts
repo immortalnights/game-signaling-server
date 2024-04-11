@@ -53,8 +53,6 @@ export interface ClientMessages {
         body: {
             name: string
             options?: GameOptions
-            sessionDescription: RTCSessionDescriptionLike
-            candidates: RTCIceCandidateLike[]
             autoReady?: boolean
         }
         reply: ServerReplyMessages["player-host-game-reply"]
@@ -64,30 +62,21 @@ export interface ClientMessages {
         body: void
         reply: ServerReplyMessages["player-list-players-reply"]
     }
-    "player-list-games": {
-        name: "player-list-games"
+    "player-list-rooms": {
+        name: "player-list-rooms"
         body: void
-        reply: ServerReplyMessages["player-list-games-reply"]
+        reply: ServerReplyMessages["player-list-rooms-reply"]
     }
-    // FIXME remove, use leave-game instead
-    "player-delete-game": {
-        name: "player-delete-game"
-        // FIXME id should not be required
-        body: { id: string }
-        reply: undefined
-    }
-    "player-join-game": {
-        name: "player-join-game"
-        // FIXME id should not be required
+    "player-join-room": {
+        name: "player-join-room"
         body: {
-            id: string
-            sessionDescription: RTCSessionDescriptionLike
+            room: string
             autoReady?: boolean
         }
-        reply: ServerReplyMessages["player-join-game-reply"]
+        reply: ServerReplyMessages["player-join-room-reply"]
     }
-    "player-leave-game": {
-        name: "player-leave-game"
+    "player-leave-room": {
+        name: "player-leave-room"
         body: void
         reply: undefined
     }
@@ -113,14 +102,12 @@ export interface ClientMessages {
     }
     "player-change-ready-state": {
         type: "player-change-ready-state"
-        // FIXME id should not be required
-        body: { id: string; ready: boolean }
+        body: { ready: boolean }
         reply: undefined
     }
     "player-start-game": {
         type: "player-start-game"
-        // FIXME id should not be required
-        body: { id: string }
+        body: { options: object }
         reply: undefined
     }
 }
@@ -134,16 +121,16 @@ export interface ServerReplyMessages {
         "player-host-game-reply",
         RoomRecord
     >
-    "player-list-games-reply": ServerReplyMessage<
-        "player-list-games-reply",
-        { games: RoomRecord[] }
+    "player-list-rooms-reply": ServerReplyMessage<
+        "player-list-rooms-reply",
+        { rooms: RoomRecord[] }
     >
     "player-list-players-reply": ServerReplyMessage<
-        "player-list-games-players",
+        "player-list-players-reply",
         { players: PlayerRecord[] }
     >
-    "player-join-game-reply": ServerReplyMessage<
-        "player-join-game-reply",
+    "player-join-room-reply": ServerReplyMessage<
+        "player-join-room-reply",
         RoomRecord
     >
 }
@@ -164,7 +151,7 @@ export interface ServerMessages {
     }
     "lobby-player-disconnected": {
         name: "lobby-player-disconnected"
-        body: Pick<PlayerRecord, "id">
+        body: Pick<PlayerRecord, "id" | "name">
     }
     "lobby-room-created": {
         name: "lobby-room-created"
@@ -180,7 +167,7 @@ export interface ServerMessages {
     }
     "room-player-disconnected": {
         name: "room-player-disconnected"
-        body: Pick<PlayerRecord, "id">
+        body: Pick<PlayerRecord, "id" | "name">
     }
     "room-player-ready-change": {
         name: "room-player-ready-change"
@@ -188,11 +175,16 @@ export interface ServerMessages {
     }
     "room-player-rtc-host-offer": {
         name: "room-player-rtc-host-offer"
-        body: Pick<PlayerRecord, "id" | "sessionDescription" | "candidates">
+        body: Pick<PlayerRecord, "id"> & {
+            sessionDescription: RTCSessionDescriptionLike
+            candidates: RTCIceCandidateLike[]
+        }
     }
     "room-player-rtc-answer": {
         name: "room-player-rtc-answer"
-        body: Pick<PlayerRecord, "id" | "sessionDescription">
+        body: Pick<PlayerRecord, "id"> & {
+            sessionDescription: RTCSessionDescriptionLike
+        }
     }
     "room-start-game": {
         name: "room-start-game"

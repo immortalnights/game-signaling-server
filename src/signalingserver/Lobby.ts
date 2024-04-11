@@ -8,20 +8,6 @@ import { deleteItemFromArray, throwError } from "./utilities.js"
 import { broadcast, sendTo } from "./broadcast.js"
 import { RoomState } from "./states.js"
 
-type LobbyMessageTypes =
-    | "player-join-lobby"
-    | "player-leave-lobby"
-    | "player-host-game"
-    | "player-list-players"
-    | "player-list-games"
-    | "player-delete-game"
-    | "player-join-game"
-    | "player-leave-game"
-    | "player-connect-to-peer"
-    | "player-connect-to-host"
-    | "player-change-ready-state"
-    | "player-start-game"
-
 export type ClientMessageHandler = {
     [K in keyof ClientMessages]: (
         player: ServerPlayer,
@@ -32,7 +18,7 @@ export type ClientMessageHandler = {
 export class Lobby {
     rooms: Room[]
     players: ServerPlayer[]
-    private messageHandlers: Pick<ClientMessageHandler, LobbyMessageTypes>
+    private messageHandlers: Partial<ClientMessageHandler>
 
     constructor() {
         this.rooms = []
@@ -43,10 +29,9 @@ export class Lobby {
             "player-leave-lobby": this.handlePlayerLeaveLobby,
             "player-host-game": this.handlePlayerHostGame,
             "player-list-players": this.handlePlayerListPlayers,
-            "player-list-games": this.handlePlayerListGames,
-            "player-delete-game": this.handlePlayerDeleteGame,
-            "player-join-game": this.handlePlayerJoinGame,
-            "player-leave-game": this.handlePlayerLeaveGame,
+            "player-list-rooms": this.handlePlayerListRooms,
+            "player-join-room": this.handlePlayerJoinRoom,
+            "player-leave-room": this.handlePlayerLeaveRoom,
             "player-change-ready-state": this.handlePlayerChangeReadyState,
             "player-connect-to-peer": this.handlePlayerConnectToPeer,
             "player-connect-to-host": this.handlePlayerConnectToHost,
@@ -207,13 +192,11 @@ export class Lobby {
 
     private handlePlayerHostGame: ClientMessageHandler["player-host-game"] = (
         player,
-        { name, options, sessionDescription, candidates, autoReady },
+        { name, options, autoReady },
     ) => {
         type Reply = ClientMessages["player-host-game"]["reply"]
 
         // Must update host with sessionDescription as room copies PlayerRecord
-        player.sessionDescription = sessionDescription
-        player.candidates = candidates
         player.autoReady = autoReady ?? false
         player.ready = autoReady ?? false
 
@@ -235,63 +218,58 @@ export class Lobby {
     }
 
     private handlePlayerListPlayers: ClientMessageHandler["player-list-players"] =
-        (player, body) => {
+        (player) => {
             console.log(`Have ${this.players.length} players in lobby`)
             return {
-                name: "player-list-games-players",
+                name: "player-list-players-reply",
                 success: true,
                 body: { players: [] },
             }
         }
 
-    private handlePlayerListGames: ClientMessageHandler["player-list-games"] = (
+    private handlePlayerListRooms: ClientMessageHandler["player-list-rooms"] = (
         player,
     ) => {
-        type Reply = ClientMessages["player-list-games"]["reply"]
+        type Reply = ClientMessages["player-list-rooms"]["reply"]
 
-        const games = this.rooms.map((room) => room.serialize())
+        const rooms = this.rooms.map((room) => room.serialize())
 
         return {
-            name: "player-list-games-reply" as const,
+            name: "player-list-rooms-reply" as const,
             success: true,
-            body: { games },
+            body: { rooms },
         } satisfies Reply
     }
 
-    private handlePlayerDeleteGame: ClientMessageHandler["player-delete-game"] =
-        (player, { id: gameId }) => {
-            console.debug("handlePlayerDeleteGame unimplemented")
-        }
-
-    private handlePlayerJoinGame: ClientMessageHandler["player-join-game"] = (
+    private handlePlayerJoinRoom: ClientMessageHandler["player-join-room"] = (
         player,
-        { id: gameId, sessionDescription, autoReady },
+        { room: roomId, autoReady },
     ) => {
-        type Reply = ClientMessages["player-join-game"]["reply"]
+        type Reply = ClientMessages["player-join-room"]["reply"]
 
-        const room = this.rooms.find((room) => room.id === gameId)
+        const room = this.rooms.find((room) => room.id === roomId)
 
         let reply
         if (room) {
             if (room.players.length < room.options.maxPlayers) {
                 player.ready = autoReady ?? false
-                room.join(player, sessionDescription)
+                room.join(player)
 
                 reply = {
-                    name: "player-join-game-reply",
+                    name: "player-join-room-reply",
                     success: true,
                     body: room.serialize(),
                 } satisfies Reply
             } else {
                 reply = {
-                    name: "player-join-game-reply" as const,
+                    name: "player-join-room-reply" as const,
                     success: false,
                     error: "Cannot join room, room is full",
                 } satisfies Reply
             }
         } else {
             reply = {
-                name: "player-join-game-reply" as const,
+                name: "player-join-room-reply" as const,
                 success: false,
                 error: "Room does not exist",
             } satisfies Reply
@@ -300,22 +278,29 @@ export class Lobby {
         return reply
     }
 
-    private handlePlayerLeaveGame: ClientMessageHandler["player-leave-game"] = (
+    private handlePlayerLeaveRoom: ClientMessageHandler["player-leave-room"] = (
         player,
     ) => {
-        console.debug("handlePlayerLeaveGame unimplemented")
+        console.assert(player.room, "Player is not a member of a room")
+        const room = this.rooms.find((room) => room.id === player.room)
+        if (room) {
+            room.leave(player)
+
+            if (room.state === RoomState.Closed) {
+                this.deleteRoom(room)
+            }
+        }
     }
 
     private handlePlayerChangeReadyState: ClientMessageHandler["player-change-ready-state"] =
-        (player, { id, ready }) => {
-            console.assert(player.id === id, "Mismatch player ID")
+        (player, { ready }) => {
             console.assert(player.room, "Player is not a member of a room")
             player.ready = ready
 
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
                 broadcast(room.players, "room-player-ready-change", {
-                    id,
+                    id: player.id,
                     ready,
                 })
             }
