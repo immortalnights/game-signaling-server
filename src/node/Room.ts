@@ -64,7 +64,6 @@ export class Room {
 
     setReadyState(ready: boolean) {
         this.ws.send("player-change-ready-state", {
-            id: this.player.id!,
             ready,
         })
     }
@@ -77,7 +76,7 @@ export class Room {
     }
 
     private handlePlayerConnected: ServerMessageHandler["room-player-connected"] =
-        ({ id, name, sessionDescription }) => {
+        ({ id, name }) => {
             console.assert(
                 this.players.length < this.options.maxPlayers,
                 "Room has too many players",
@@ -85,22 +84,6 @@ export class Room {
 
             console.debug(`Player '${name}' (${id}) has joined room`)
             this.players.push(new RemotePlayer(id, name))
-
-            if (this.host) {
-                if (
-                    sessionDescription &&
-                    "type" in sessionDescription &&
-                    "sdp" in sessionDescription
-                ) {
-                    this.player.peerConnection.response(
-                        sessionDescription as RTCSessionDescription,
-                    )
-                } else {
-                    console.error(
-                        "Player connected without RTC answer, expected by host",
-                    )
-                }
-            }
         }
 
     private handlePlayerDisconnected: ServerMessageHandler["room-player-disconnected"] =

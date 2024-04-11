@@ -95,14 +95,9 @@ export class Lobby {
             throw new Error("Lobby missing local player")
         }
 
-        const { offer, iceCandidates } =
-            await this.player.peerConnection.offer()
-
         this.ws?.send("player-host-game", {
             name,
             options,
-            sessionDescription: offer,
-            iceCandidates,
         })
 
         type ReplyMessageData = ServerReplyData<"player-host-game-reply">
@@ -126,15 +121,15 @@ export class Lobby {
             throw new Error("Lobby missing local player")
         }
 
-        this.ws?.send("player-list-games")
+        this.ws?.send("player-list-rooms")
 
-        type ReplyMessageData = ServerReplyData<"player-list-games-reply">
+        type ReplyMessageData = ServerReplyData<"player-list-rooms-reply">
 
         const data = (await this.ws?.waitForMessage<ReplyMessageData>(
-            "player-list-games-reply",
-        )) as unknown as { games: RoomRecord[] }
+            "player-list-rooms-reply",
+        )) as unknown as { rooms: RoomRecord[] }
 
-        return data ? data.games : []
+        return data ? data.rooms : []
     }
 
     /**
@@ -151,48 +146,17 @@ export class Lobby {
             room.players.find((player) => player.host) ??
             throwError("Failed to find host")
 
-        if (!host.sessionDescription) {
-            throw Error("Room host does not have peer connection")
-        }
-
-        if (
-            !(
-                "type" in host.sessionDescription &&
-                "sdp" in host.sessionDescription
-            )
-        ) {
-            throw Error("Room host does not have been connection")
-        }
-
-        if (!host.iceCandidates) {
-            throw Error("Room host does not have ice candidates")
-        }
-
-        const answer = await this.player.peerConnection.answer(
-            host.sessionDescription as RTCSessionDescription,
-            host.iceCandidates as RTCIceCandidate[],
-        )
-
-        this.ws?.send("player-join-game", {
-            id: room.id,
-            sessionDescription: answer,
+        this.ws?.send("player-join-room", {
+            room: room.id,
         })
 
-        type ReplyMessageData = ServerReplyData<"player-join-game-reply">
+        type ReplyMessageData = ServerReplyData<"player-join-room-reply">
 
         const data = (await this.ws?.waitForMessage<ReplyMessageData>(
-            "player-join-game-reply",
+            "player-join-room-reply",
         )) as unknown as RoomRecord
 
         this.room = new Room(this.ws!, data, this.player)
         return this.room
-    }
-
-    /**
-     *
-     * @param name
-     */
-    async delete(name: string) {
-        this.ws?.send("player-delete-game", { id: name })
     }
 }
