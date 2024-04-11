@@ -24,16 +24,13 @@ export const sendTo = <T extends keyof ServerMessages>(
 export const broadcast = <T extends keyof ServerMessages>(
     players: ServerPlayer[],
     name: ServerMessages[T]["name"],
-    data:
-        | ServerMessages[T]["body"]
-        | ((target: ServerPlayer) => ServerMessages[T]["body"]),
+    body: ServerMessages[T]["body"],
     exclude: string[] = [],
 ) => {
     players.forEach((player) => {
         if (!exclude.includes(player.id)) {
             console.debug(`Broadcast ${name} to ${player.id}`)
 
-            const body = data instanceof Function ? data(player) : data
             try {
                 player.ws.send(
                     JSON.stringify({
