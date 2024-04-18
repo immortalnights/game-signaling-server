@@ -345,11 +345,10 @@ export class Lobby {
         if (player.host) {
             const room = this.rooms.find((room) => room.id === player.room)
             if (room) {
-                room.state = RoomState.Locked
+                room.state = RoomState.Locked as RoomState
 
                 const gameId = randomUUID()
                 room.players.forEach((p) => {
-                    p.room = undefined
                     p.game = gameId
                 })
 
@@ -357,6 +356,13 @@ export class Lobby {
                     room: room.id,
                     game: gameId,
                 })
+
+                room.players.forEach((p) => room.leave(p))
+
+                // ts error if Locked state is not cast to RoomState
+                if (room.state === RoomState.Closed) {
+                    this.deleteRoom(room)
+                }
             } else {
                 console.error(`Player ${player.id} is in a room`)
             }
