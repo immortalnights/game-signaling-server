@@ -15,13 +15,21 @@ app({
             console.debug(
                 `Received ${message.name} from ${ws.getUserData().id}`,
             )
-            lobby.handleMessage(ws, message)
+            try {
+                lobby.handleMessage(ws, message)
+            } catch (error) {
+                console.trace(error)
+            }
         } else {
             console.error("Message received without a name, discarded")
         }
     },
     onClose(ws, code, message) {
         console.log("Client disconnected", code, message)
-        lobby.disconnected(ws)
+        try {
+            lobby.disconnected(ws)
+        } catch (error) {
+            console.trace(error)
+        }
     },
 })
