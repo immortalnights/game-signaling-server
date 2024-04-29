@@ -32,14 +32,13 @@
     "concurrently": "^8.2.2",
     "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
-  },
-  "dependencies": {
+    "typescript": "^5.3.3",
     "@inquirer/prompts": "^3.3.0",
     "commander": "^11.1.0",
     "install": "^0.13.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.39.0",
     "werift": "^0.19.0",
     "ws": "^8.16.0"
-  }
+  },
+  "dependencies": {}
 }
