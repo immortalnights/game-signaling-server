@@ -1,0 +1,13 @@
+{
+    "name": "game-signaling-server",
+    "private": true,
+    "version": "0.1.0",
+    "license": "Apache-2.0",
+    "main": "./index.js",
+    "module": "./index.js",
+    "types": "./index.d.ts",
+    "peerDependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+    }
+}
