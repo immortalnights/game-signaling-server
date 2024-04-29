@@ -133,7 +133,6 @@ export class Lobby {
                     name: message.body.name,
                     host: false,
                     ready: false,
-                    sessionDescription: undefined,
                     autoReady: false,
                 } satisfies ServerPlayer
 
