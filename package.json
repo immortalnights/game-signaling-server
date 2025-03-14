@@ -28,17 +28,16 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/ws": "^8.5.10",
-    "concurrently": "^8.2.2",
-    "nodemon": "^3.0.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3",
-    "@inquirer/prompts": "^3.3.0",
-    "commander": "^11.1.0",
+    "@inquirer/prompts": "^7.3.3",
+    "@types/ws": "^8.18.0",
+    "commander": "^13.1.0",
+    "concurrently": "^9.1.2",
     "install": "^0.13.0",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.39.0",
-    "werift": "^0.19.0",
-    "ws": "^8.16.0"
-  },
-  "dependencies": {}
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.51.0",
+    "werift": "^0.22.1",
+    "ws": "^8.18.1"
+  }
 }
